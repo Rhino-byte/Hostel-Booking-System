@@ -1,0 +1,296 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  SECRETARY
+  MATRON
+  PARENT
+}
+
+enum BathroomType {
+  PRIVATE
+  SHARED
+}
+
+enum RoomConfig {
+  PRIVATE_SINGLE
+  SHARED_SINGLE
+  SHARED_BUNK
+}
+
+enum BookingStatus {
+  ACTIVE
+  ENDED
+  CANCELLED
+}
+
+enum PaymentMode {
+  PAY_BILL
+  TILL
+  CASH
+  BANK
+  OTHER
+}
+
+enum PaymentKind {
+  FEE
+  DEPOSIT
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  VOID
+  DELETE
+  ASSIGN
+  REASSIGN
+}
+
+enum PaymentSource {
+  APP
+  SHEET
+}
+
+enum SyncDirection {
+  PULL
+  PUSH
+  BOTH
+}
+
+model User {
+  id          String   @id @default(cuid())
+  firebaseUid String?  @unique
+  phone       String?  @unique
+  email       String?  @unique
+  name        String
+  role        Role     @default(PARENT)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  paymentsEntered Payment[]          @relation("EnteredBy")
+  bookingsAssigned Booking[]         @relation("AssignedBy")
+  bookingEvents   BookingEvent[]
+  auditLogs       AuditLog[]
+  guardians       StudentGuardian[]
+  syncLogs        SyncLog[]
+}
+
+model Student {
+  id              String    @id @default(cuid())
+  admissionNo     String    @unique
+  name            String
+  roomNumber      String?   @unique
+  classForm       String?
+  phone           String?
+  guardianName    String?
+  guardianPhone   String?
+  guardianEmail   String?
+  sheetRowNo      Int?      @unique
+  residenceTypeId String?
+  clearedAt       DateTime? // semester clear — hidden from UX, row kept
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  residenceType ResidenceType?    @relation(fields: [residenceTypeId], references: [id])
+  guardians     StudentGuardian[]
+  bookings      Booking[]
+  payments      Payment[]
+
+  @@index([clearedAt])
+}
+
+model StudentGuardian {
+  id        String   @id @default(cuid())
+  studentId String
+  userId    String?
+  phone     String
+  createdAt DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([studentId, phone])
+  @@index([phone])
+  @@index([userId])
+}
+
+model Term {
+  id        String    @id @default(cuid())
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  isActive  Boolean   @default(false)
+  hiddenAt  DateTime?
+  createdAt DateTime  @default(now())
+
+  bookings Booking[]
+  payments Payment[]
+}
+
+model ResidenceType {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  label       String
+  feeKes      Int
+  depositKes  Int
+  bathroom    BathroomType
+  config      RoomConfig
+  features    String
+  sortOrder   Int          @default(0)
+
+  blocks   Block[]
+  bookings Booking[]
+  students Student[]
+}
+
+model Block {
+  id              String @id @default(cuid())
+  name            String
+  code            String @unique
+  residenceTypeId String
+
+  residenceType ResidenceType @relation(fields: [residenceTypeId], references: [id])
+  rooms         Room[]
+}
+
+model Room {
+  id       String @id @default(cuid())
+  blockId  String
+  number   String
+  capacity Int    @default(1)
+
+  block Block  @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  beds  Bed[]
+
+  @@unique([blockId, number])
+}
+
+model Bed {
+  id     String @id @default(cuid())
+  roomId String
+  label  String
+
+  room     Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@unique([roomId, label])
+}
+
+model Booking {
+  id              String        @id @default(cuid())
+  studentId       String
+  bedId           String
+  termId          String
+  residenceTypeId String
+  status          BookingStatus @default(ACTIVE)
+  assignedById    String?
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  student       Student       @relation(fields: [studentId], references: [id])
+  bed           Bed           @relation(fields: [bedId], references: [id])
+  term          Term          @relation(fields: [termId], references: [id])
+  residenceType ResidenceType @relation(fields: [residenceTypeId], references: [id])
+  assignedBy    User?         @relation("AssignedBy", fields: [assignedById], references: [id])
+  events        BookingEvent[]
+
+  @@index([studentId, termId])
+  @@index([bedId, termId, status])
+}
+
+model BookingEvent {
+  id         String   @id @default(cuid())
+  bookingId  String
+  action     String
+  fromBedId  String?
+  toBedId    String?
+  note       String?
+  userId     String?
+  createdAt  DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id])
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  studentId   String
+  termId      String
+  amount      Int
+  date        DateTime
+  mode        PaymentMode
+  kind        PaymentKind   @default(FEE)
+  source      PaymentSource @default(APP)
+  sheetHash   String?
+  referenceNo String?
+  blockCode   String?
+  notes       String?
+  enteredById String?
+  voidedAt    DateTime?
+  voidReason  String?
+  clearedAt   DateTime? // semester clear — hidden from UX, row kept
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  student   Student @relation(fields: [studentId], references: [id])
+  term      Term    @relation(fields: [termId], references: [id])
+  enteredBy User?   @relation("EnteredBy", fields: [enteredById], references: [id])
+
+  @@index([studentId, termId])
+  @@index([date])
+  @@index([referenceNo])
+  @@index([sheetHash])
+  @@index([clearedAt])
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  entity     String
+  entityId   String
+  action     AuditAction
+  beforeJson String?
+  afterJson  String?
+  userId     String?
+  createdAt  DateTime    @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+model ContactEnquiry {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String
+  email     String?
+  message   String
+  createdAt DateTime @default(now())
+}
+
+model SyncLog {
+  id         String        @id @default(cuid())
+  direction  SyncDirection @default(BOTH)
+  pulled     Int           @default(0)
+  pushed     Int           @default(0)
+  created    Int           @default(0)
+  updated    Int           @default(0)
+  conflicts  Int           @default(0)
+  errorsJson String?
+  notesJson  String?
+  userId     String?
+  createdAt  DateTime      @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+}
