@@ -33,7 +33,11 @@ export function getFirebaseAdmin() {
 export async function verifyFirebaseIdToken(idToken: string) {
   const app = getFirebaseAdmin();
   if (!app) return null;
-  return getAuth(app).verifyIdToken(idToken);
+  try {
+    return await getAuth(app).verifyIdToken(idToken);
+  } catch {
+    return null;
+  }
 }
 
 export async function createFirebaseAuthUser(opts: {
