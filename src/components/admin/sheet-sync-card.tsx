@@ -82,7 +82,9 @@ export function SheetSyncCard() {
             Google Sheet sync
           </CardTitle>
           <CardDescription>
-            Live roster and payment mirror for Sheet1 (NAME, NO, DATE, AMOUNT, BLOCK, MODE).
+            Optional roster and payment mirror for Sheet1 (NAME, NO, DATE, AMOUNT,
+            BLOCK, MODE). Scheduled sync is off on Vercel Hobby; use Sync now when
+            Sheets is connected.
           </CardDescription>
         </div>
         <Button onClick={syncNow} disabled={loading || status?.configured === false}>
@@ -109,10 +111,11 @@ export function SheetSyncCard() {
 
         {!status?.configured ? (
           <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            Add <code className="text-xs">GOOGLE_SERVICE_ACCOUNT_EMAIL</code> and{" "}
-            <code className="text-xs">GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY</code> to{" "}
-            <code className="text-xs">.env</code>, then share the Google Sheet with that email as
-            Editor.
+            Sheets is optional. When you need it, add{" "}
+            <code className="text-xs">GOOGLE_SERVICE_ACCOUNT_EMAIL</code> and{" "}
+            <code className="text-xs">GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY</code>, share
+            the sheet as Editor, then use <strong>Sync now</strong>. Scheduled cron is
+            disabled for free-tier deploys.
           </p>
         ) : null}
 

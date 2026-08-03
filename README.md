@@ -62,7 +62,7 @@ CRON_SECRET=a-long-random-string
 | Push | After app payment create/void (and on full sync), writes total paid, latest date/mode, and block letter back to that student's row |
 
 - Sheet wins for **NAME**; app ledger wins for **AMOUNT / DATE / MODE**.
-- Cron: every 10 minutes via `vercel.json` → `GET /api/cron/sync` with `Authorization: Bearer $CRON_SECRET`.
+- **Scheduled cron is disabled** on Vercel Hobby (free). Use **Settings → Sync now** when Sheets is connected. To re-enable later on Pro, add a daily cron in `vercel.json` (e.g. `0 3 * * *` → `/api/cron/sync`) and set `CRON_SECRET`.
 
 ### Block mapping
 
@@ -82,7 +82,7 @@ Copy `.env.example` to `.env`. Key variables:
 - `JWT_SECRET` — session signing secret
 - `SESSION_IDLE_MS` — idle timeout (default 15 minutes)
 - Firebase client + admin vars — leave empty and keep `NEXT_PUBLIC_DEMO_AUTH=true` for local demo
-- `GOOGLE_*` / `CRON_SECRET` — sheet sync (see above)
+- `GOOGLE_*` / `CRON_SECRET` — optional sheet sync (manual Sync now; cron off on Hobby)
 
 ## Scripts
 
@@ -97,13 +97,13 @@ Copy `.env.example` to `.env`. Key variables:
 - Public: home, residences (compare), amenities, contact
 - Admin: dashboard charts, students, interactive hostel map, payment side-sheet, reports/CSV, settings/audit
 - Parent: OTP login, balance ring, payment timeline, printable statement
-- Live Google Sheet sync (manual + cron)
-- Sessions expire after idle; OTP required again
+- Live Google Sheet sync (optional; manual Sync now; cron disabled on Hobby)
+- Sessions expire after idle; email/password or Google sign-in (admin-provisioned)
 
 ## Production notes
 
 1. Set `provider = "postgresql"` in `prisma/schema.prisma` and point `DATABASE_URL` at managed Postgres.
-2. Configure Firebase Phone Auth + Admin SDK; set `NEXT_PUBLIC_DEMO_AUTH=false`.
+2. Configure Firebase Email/Password + Google + Admin SDK; set `NEXT_PUBLIC_DEMO_AUTH=false`.
 3. Rotate `JWT_SECRET` and enable HTTPS (secure cookies).
-4. Configure Google service account + sheet sharing; set `CRON_SECRET` for Vercel Cron.
+4. Google Sheets is optional — leave `GOOGLE_*` unset until needed; then use Sync now. Cron is not enabled on Hobby.
 5. Schedule Postgres backups — this is the hostel financial record of truth (see `docs/BACKUP.md`).
