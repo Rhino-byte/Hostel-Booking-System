@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { signOutFirebase } from "@/lib/firebase-client";
 
 const nav = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
@@ -46,6 +47,7 @@ export function AppSidebar({
   const router = useRouter();
 
   async function logout() {
+    await signOutFirebase();
     await fetch("/api/auth/logout", { method: "POST" });
     toast.message("Signed out");
     router.push("/login");

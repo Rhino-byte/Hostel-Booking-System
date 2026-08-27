@@ -14,7 +14,7 @@ export type SessionPayload = {
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || "stclare_session";
 export const IDLE_MS = Number(process.env.SESSION_IDLE_MS || 15 * 60 * 1000);
 export const ABSOLUTE_MS = Number(process.env.SESSION_ABSOLUTE_MS || 8 * 60 * 60 * 1000);
-const REFRESH_THROTTLE_MS = 60_000;
+export const REFRESH_THROTTLE_MS = 60_000;
 
 function secretKey() {
   const secret = process.env.JWT_SECRET;
@@ -27,9 +27,11 @@ function secretKey() {
 export async function signSession(
   payload: Omit<SessionPayload, "iat" | "lastActivity"> & {
     lastActivity?: number;
+    iat?: number;
   }
 ): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
+  const iat = payload.iat ?? now;
   return new SignJWT({
     uid: payload.uid,
     role: payload.role,
@@ -38,8 +40,8 @@ export async function signSession(
     lastActivity: payload.lastActivity ?? now,
   })
     .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt(now)
-    .setExpirationTime(now + Math.floor(ABSOLUTE_MS / 1000))
+    .setIssuedAt(iat)
+    .setExpirationTime(iat + Math.floor(ABSOLUTE_MS / 1000))
     .sign(secretKey());
 }
 

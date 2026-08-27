@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MoneyText } from "@/components/money-text";
 import { StatusBadge } from "@/components/status-badge";
 import { format } from "date-fns";
+import { signOutFirebase } from "@/lib/firebase-client";
 
 type PortalData = {
   user: { name: string };
@@ -81,6 +82,7 @@ export default function ParentPortalPage() {
   }, [router]);
 
   async function logout() {
+    await signOutFirebase();
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
   }

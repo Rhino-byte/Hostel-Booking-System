@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -20,6 +20,10 @@ import {
   signInWithEmailPassword,
   signInWithGoogle,
   getIdTokenFromCredential,
+  getIdTokenFromCurrentUser,
+  completeGoogleRedirect,
+  firebaseAuthMessage,
+  GoogleRedirectStarted,
 } from "@/lib/firebase-client";
 
 function LoginForm() {
@@ -27,6 +31,7 @@ function LoginForm() {
   const params = useSearchParams();
   const reason = params.get("reason");
   const next = params.get("next");
+  const idle = reason === "idle";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -46,6 +51,30 @@ function LoginForm() {
     router.refresh();
   }
 
+  useEffect(() => {
+    if (!configured) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const cred = await completeGoogleRedirect();
+        if (!cred || cancelled) return;
+        setLoading(true);
+        const idToken = await getIdTokenFromCredential(cred);
+        await establishSession(idToken);
+      } catch (err) {
+        if (!cancelled) {
+          toast.error(firebaseAuthMessage(err));
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount for redirect return
+  }, [configured]);
+
   async function onEmailSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!configured) {
@@ -58,15 +87,7 @@ function LoginForm() {
       const idToken = await getIdTokenFromCredential(cred);
       await establishSession(idToken);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Login failed";
-      if (message.includes("auth/invalid-credential") || message.includes("auth/wrong-password")) {
-        toast.error("Incorrect email or password");
-      } else if (message.includes("auth/user-not-found")) {
-        toast.error("Incorrect email or password");
-      } else {
-        toast.error(message);
-      }
+      toast.error(firebaseAuthMessage(err));
     } finally {
       setLoading(false);
     }
@@ -79,11 +100,21 @@ function LoginForm() {
     }
     setLoading(true);
     try {
-      const cred = await signInWithGoogle();
+      if (idle) {
+        const existing = await getIdTokenFromCurrentUser();
+        if (existing) {
+          await establishSession(existing);
+          return;
+        }
+      }
+      const cred = await signInWithGoogle({
+        forceAccountPicker: !idle,
+      });
       const idToken = await getIdTokenFromCredential(cred);
       await establishSession(idToken);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Google sign-in failed");
+      if (err instanceof GoogleRedirectStarted) return;
+      toast.error(firebaseAuthMessage(err));
     } finally {
       setLoading(false);
     }
@@ -101,8 +132,8 @@ function LoginForm() {
           </Link>
           <CardTitle>Sign in</CardTitle>
           <CardDescription>
-            {reason === "idle"
-              ? "Your session expired after a period of inactivity. Please sign in again."
+            {idle
+              ? "Your session expired after a period of inactivity. Sign in again — Google can continue in one click."
               : "Use your school email and password, or continue with Google. Accounts are added by an administrator."}
           </CardDescription>
         </CardHeader>
