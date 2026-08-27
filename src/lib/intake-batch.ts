@@ -61,10 +61,10 @@ export type IntakeBatchResult = {
 };
 
 function studentLabel(
-  row: IntakeBatchStudentInput,
+  row: IntakeBatchStudentInput | undefined,
   fallbackName?: string | null
 ) {
-  return row.name?.trim() || fallbackName || row.tempId;
+  return row?.name?.trim() || fallbackName || row?.tempId || "Student";
 }
 
 export async function commitIntakeBatch(
@@ -169,7 +169,7 @@ export async function commitIntakeBatch(
       if (seenPay.has(row.tempId)) {
         errors.push({
           tempId: row.tempId,
-          name: studentLabel(byTemp.get(row.tempId) ?? { tempId: row.tempId }),
+          name: studentLabel(byTemp.get(row.tempId)),
           reason: "Duplicate student in this request",
         });
         continue;
@@ -178,7 +178,7 @@ export async function commitIntakeBatch(
       if (!Number.isInteger(row.amount) || row.amount <= 0) {
         errors.push({
           tempId: row.tempId,
-          name: studentLabel(byTemp.get(row.tempId) ?? { tempId: row.tempId }),
+          name: studentLabel(byTemp.get(row.tempId)),
           reason: "Amount must be a positive whole number",
         });
         continue;
@@ -357,7 +357,12 @@ export async function commitIntakeBatch(
         const bookingByPair = new Map(
           insertedBookings.map((b) => [bookingKey(b.studentId, b.bedId), b])
         );
-        const events = [];
+        const events: {
+          bookingId: string;
+          action: string;
+          toBedId: string;
+          userId: string;
+        }[] = [];
         for (const row of bookingsToCreate) {
           const booking = bookingByPair.get(
             bookingKey(row.studentId, row.bedId)
@@ -395,7 +400,8 @@ export async function commitIntakeBatch(
         amount: number;
       }[] = [];
 
-      if (input.allowPayments && input.payments) {
+      const paymentInput = input.payments;
+      if (input.allowPayments && paymentInput) {
         for (const [tempId, amount] of paymentByTemp) {
           const label = studentLabel(byTemp.get(tempId));
           const studentId = tempToStudentId.get(tempId);
@@ -416,11 +422,11 @@ export async function commitIntakeBatch(
               studentId: row.studentId,
               termId: input.termId,
               amount: row.amount,
-              date: input.payments!.date,
-              mode: input.payments!.mode,
+              date: paymentInput.date,
+              mode: paymentInput.mode,
               kind: "FEE" as const,
               source: "APP" as const,
-              referenceNo: input.payments!.referenceNo?.trim() || null,
+              referenceNo: paymentInput.referenceNo?.trim() || null,
               enteredById: input.userId,
             })),
           });
