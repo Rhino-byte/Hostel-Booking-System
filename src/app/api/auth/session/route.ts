@@ -34,7 +34,9 @@ export async function POST(req: Request) {
     where: {
       OR: [
         { firebaseUid },
-        ...(email ? [{ email }] : []),
+        ...(email
+          ? [{ email: { equals: email, mode: "insensitive" as const } }]
+          : []),
       ],
     },
   });
@@ -42,14 +44,20 @@ export async function POST(req: Request) {
   if (!user) {
     return NextResponse.json(
       {
-        error:
-          "No account for this email. Ask an administrator to add you.",
+        error: email
+          ? `No account for ${email}. Ask an administrator to add this exact email in Settings → Users.`
+          : "No account found for this sign-in. Ask an administrator to add you.",
       },
       { status: 403 }
     );
   }
 
   if (!user.firebaseUid || user.firebaseUid !== firebaseUid) {
+    // Avoid unique conflicts if another row already holds this UID
+    await prisma.user.updateMany({
+      where: { firebaseUid, NOT: { id: user.id } },
+      data: { firebaseUid: null },
+    });
     user = await prisma.user.update({
       where: { id: user.id },
       data: {
@@ -57,10 +65,15 @@ export async function POST(req: Request) {
         ...(email && !user.email ? { email } : {}),
       },
     });
-  } else if (email && user.email !== email) {
-    // Keep email in sync when Firebase email is authoritative and unique
+  }
+
+  // Normalize stored email to the Firebase email when safe
+  if (email && user.email?.toLowerCase() !== email) {
     const taken = await prisma.user.findFirst({
-      where: { email, NOT: { id: user.id } },
+      where: {
+        email: { equals: email, mode: "insensitive" },
+        NOT: { id: user.id },
+      },
     });
     if (!taken) {
       user = await prisma.user.update({

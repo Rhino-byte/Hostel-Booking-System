@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import {
   createFirebaseAuthUser,
+  getFirebaseUidByEmail,
   isAdminConfigured,
 } from "@/lib/firebase-admin";
 
@@ -52,7 +53,9 @@ export async function POST(req: Request) {
   const email = parsed.data.email.trim().toLowerCase();
   const password = parsed.data.password?.trim() || "";
 
-  const existing = await prisma.user.findFirst({ where: { email } });
+  const existing = await prisma.user.findFirst({
+    where: { email: { equals: email, mode: "insensitive" } },
+  });
   if (existing) {
     return NextResponse.json(
       { error: "A user with this email already exists" },
@@ -84,6 +87,9 @@ export async function POST(req: Request) {
         e instanceof Error ? e.message : "Could not create Firebase Auth user";
       return NextResponse.json({ error: message }, { status: 400 });
     }
+  } else if (isAdminConfigured()) {
+    // Google-only invite: if they already signed into Firebase somehow, store UID
+    firebaseUid = await getFirebaseUidByEmail(email);
   }
 
   const user = await prisma.user.create({

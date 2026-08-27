@@ -49,12 +49,38 @@ export async function createFirebaseAuthUser(opts: {
   if (!app) {
     throw new Error("Firebase Admin is not configured");
   }
-  return getAuth(app).createUser({
-    email: opts.email.trim().toLowerCase(),
-    password: opts.password,
-    displayName: opts.displayName,
-    emailVerified: false,
-  });
+  const auth = getAuth(app);
+  const email = opts.email.trim().toLowerCase();
+  try {
+    return await auth.createUser({
+      email,
+      password: opts.password,
+      displayName: opts.displayName,
+      emailVerified: false,
+    });
+  } catch (e: unknown) {
+    const code =
+      e && typeof e === "object" && "code" in e
+        ? String((e as { code: string }).code)
+        : "";
+    // Already in Firebase Auth — reuse that UID so app User can link
+    if (code === "auth/email-already-exists") {
+      return auth.getUserByEmail(email);
+    }
+    throw e;
+  }
+}
+
+/** Resolve Firebase Auth UID for an email if the account already exists. */
+export async function getFirebaseUidByEmail(email: string) {
+  const app = getFirebaseAdmin();
+  if (!app) return null;
+  try {
+    const user = await getAuth(app).getUserByEmail(email.trim().toLowerCase());
+    return user.uid;
+  } catch {
+    return null;
+  }
 }
 
 export { isAdminConfigured };
