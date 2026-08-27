@@ -24,6 +24,16 @@ import { MoneyText } from "@/components/money-text";
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { FeeStatus } from "@/lib/utils";
+
+type StatusFilter = "all" | FeeStatus;
 
 type BlockDetail = {
   block: { code: string; name: string };
@@ -49,7 +59,7 @@ type BlockDetail = {
     feeDue: number;
     feePaid: number;
     balance: number;
-    status: "CLEARED" | "PARTIAL" | "UNPAID" | "OVERPAID";
+    status: FeeStatus;
   }[];
 };
 
@@ -73,11 +83,13 @@ export function ResidenceDetailSheet({
   const [data, setData] = useState<BlockDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   useEffect(() => {
     if (!open || !blockCode) {
       setData(null);
       setError(null);
+      setStatusFilter("all");
       return;
     }
 
@@ -130,6 +142,12 @@ export function ResidenceDetailSheet({
           key: "UNPAID" as const,
         },
       ].filter((d) => d.value > 0)
+    : [];
+
+  const filteredStudents = data
+    ? statusFilter === "all"
+      ? data.students
+      : data.students.filter((s) => s.status === statusFilter)
     : [];
 
   return (
@@ -250,9 +268,18 @@ export function ResidenceDetailSheet({
                             innerRadius={40}
                             outerRadius={64}
                             paddingAngle={2}
+                            cursor="pointer"
+                            onClick={(_, index) => {
+                              const slice = statusChart[index];
+                              if (slice) setStatusFilter(slice.key);
+                            }}
                           >
                             {statusChart.map((d) => (
-                              <Cell key={d.key} fill={STATUS_COLORS[d.key]} />
+                              <Cell
+                                key={d.key}
+                                fill={STATUS_COLORS[d.key]}
+                                className="cursor-pointer outline-none"
+                              />
                             ))}
                           </Pie>
                           <Tooltip />
@@ -297,12 +324,37 @@ export function ResidenceDetailSheet({
               </div>
 
               <div>
-                <p className="mb-2 text-sm font-medium">
-                  Students ({data.students.length})
-                </p>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-medium">
+                    Students (
+                    {statusFilter === "all"
+                      ? data.students.length
+                      : `${filteredStudents.length} of ${data.students.length}`}
+                    )
+                  </p>
+                  <Select
+                    value={statusFilter}
+                    onValueChange={(v) => setStatusFilter(v as StatusFilter)}
+                  >
+                    <SelectTrigger className="h-9 w-full sm:w-48">
+                      <SelectValue placeholder="Fee status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All statuses</SelectItem>
+                      <SelectItem value="CLEARED">Cleared</SelectItem>
+                      <SelectItem value="PARTIAL">Paid partially</SelectItem>
+                      <SelectItem value="UNPAID">Outstanding</SelectItem>
+                      <SelectItem value="OVERPAID">Overpaid</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 {data.students.length === 0 ? (
                   <p className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
                     No students assigned to this residence yet.
+                  </p>
+                ) : filteredStudents.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+                    No students match this status.
                   </p>
                 ) : (
                   <div className="overflow-hidden rounded-xl border border-border">
@@ -318,7 +370,7 @@ export function ResidenceDetailSheet({
                           </tr>
                         </thead>
                         <tbody>
-                          {data.students.map((s) => (
+                          {filteredStudents.map((s) => (
                             <tr
                               key={s.id}
                               className="border-t border-border align-top"
