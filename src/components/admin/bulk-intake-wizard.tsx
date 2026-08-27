@@ -378,15 +378,16 @@ export function BulkIntakeWizard() {
       delete next[tempId];
       return next;
     });
-    if (removed?.existingStudentId) {
+    const existingId = removed?.existingStudentId;
+    if (removed && existingId) {
       setExistingCount((n) => Math.max(0, n - 1));
       setUnbooked((prev) =>
-        prev.some((s) => s.id === removed.existingStudentId)
+        prev.some((s) => s.id === existingId)
           ? prev
           : [
               ...prev,
               {
-                id: removed.existingStudentId,
+                id: existingId,
                 name: removed.name,
                 admissionNo: removed.admissionNo,
               },
