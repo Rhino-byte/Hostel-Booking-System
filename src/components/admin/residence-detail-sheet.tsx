@@ -124,6 +124,11 @@ export function ResidenceDetailSheet({
           value: data.payments.partial,
           key: "PARTIAL" as const,
         },
+        {
+          name: "Outstanding",
+          value: data.payments.unpaid,
+          key: "UNPAID" as const,
+        },
       ].filter((d) => d.value > 0)
     : [];
 

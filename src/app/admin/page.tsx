@@ -206,7 +206,8 @@ export default function AdminDashboardPage() {
               </button>
             ))}
             <div className="rounded-xl bg-muted px-4 py-3 text-sm">
-              Status mix: {data.totals.paid} cleared · {data.totals.partial} partial
+              Status mix: {data.totals.paid} cleared · {data.totals.partial}{" "}
+              partial · {data.totals.unpaid} outstanding
             </div>
           </CardContent>
         </Card>
