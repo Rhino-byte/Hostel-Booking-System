@@ -1,11 +1,9 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { cn, formatKes } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -22,24 +20,12 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-
-type Bed = {
-  id: string;
-  label: string;
-  bookings: {
-    student: { id: string; name: string; admissionNo: string };
-    residenceType: { code: string };
-  }[];
-};
-
-type Room = { id: string; number: string; capacity: number; beds: Bed[] };
-type Block = {
-  id: string;
-  code: string;
-  name: string;
-  residenceType: { label: string; feeKes: number };
-  rooms: Room[];
-};
+import { cn } from "@/lib/utils";
+import {
+  HostelMap,
+  type BedClickContext,
+  type HostelBlock,
+} from "@/components/admin/hostel-map";
 
 type Student = {
   id: string;
@@ -48,49 +34,41 @@ type Student = {
   roomNumber?: string | null;
 };
 
-const FULL_WIDTH_CODES = new Set(["A", "B", "C"]);
-
-function blockOccupancy(block: Block) {
-  let total = 0;
-  let occupied = 0;
-  for (const room of block.rooms) {
-    for (const bed of room.beds) {
-      total += 1;
-      if (bed.bookings.length > 0) occupied += 1;
-    }
-  }
-  return { total, occupied, free: total - occupied };
-}
-
 function HostelMapInner() {
-  const [blocks, setBlocks] = useState<Block[]>([]);
+  const [blocks, setBlocks] = useState<HostelBlock[]>([]);
   const [termId, setTermId] = useState<string>("");
   const [loading, setLoading] = useState(true);
+  const [assigning, setAssigning] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [assignOpen, setAssignOpen] = useState(false);
-  const [selectedBed, setSelectedBed] = useState<Bed | null>(null);
+  const [selectedBed, setSelectedBed] = useState<BedClickContext["bed"] | null>(
+    null
+  );
   const [studentId, setStudentId] = useState<string>("");
 
   async function load() {
     setLoading(true);
-    const [hostelRes, studentsRes] = await Promise.all([
-      fetch("/api/hostel"),
-      fetch("/api/students?unbooked=1&limit=200"),
-    ]);
-    const hostel = await hostelRes.json();
-    const studs = await studentsRes.json();
-    setBlocks(hostel.blocks || []);
-    setTermId(hostel.term?.id || "");
-    setStudents(studs.students || []);
-    setStudentId("");
-    setLoading(false);
+    try {
+      const [hostelRes, studentsRes] = await Promise.all([
+        fetch("/api/hostel"),
+        fetch("/api/students?unbooked=1&limit=200"),
+      ]);
+      const hostel = await hostelRes.json().catch(() => ({}));
+      const studs = await studentsRes.json().catch(() => ({}));
+      setBlocks(hostel.blocks || []);
+      setTermId(hostel.term?.id || "");
+      setStudents(studs.students || []);
+      setStudentId("");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
-    load();
+    void load();
   }, []);
 
-  function onBedClick(bed: Bed) {
+  function onBedClick({ bed }: BedClickContext) {
     if (bed.bookings.length) {
       toast.message(bed.bookings[0]!.student.name, {
         description: `${bed.bookings[0]!.student.admissionNo} · occupied`,
@@ -102,21 +80,28 @@ function HostelMapInner() {
   }
 
   async function assign() {
-    if (!selectedBed || !studentId || !termId) return;
-    const res = await fetch("/api/hostel", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bedId: selectedBed.id, studentId, termId }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      toast.error(data.error || "Could not assign bed");
-      return;
+    if (!selectedBed || !studentId || !termId || assigning) return;
+    setAssigning(true);
+    try {
+      const res = await fetch("/api/hostel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bedId: selectedBed.id, studentId, termId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "Could not assign bed");
+        return;
+      }
+      toast.success("Bed assigned");
+      setAssignOpen(false);
+      setStudentId("");
+      await load();
+    } catch {
+      toast.error("Could not assign bed");
+    } finally {
+      setAssigning(false);
     }
-    toast.success("Bed assigned");
-    setAssignOpen(false);
-    setStudentId("");
-    load();
   }
 
   if (loading) {
@@ -143,100 +128,15 @@ function HostelMapInner() {
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-3 text-xs">
-        <span className="inline-flex items-center gap-2">
-          <span className="h-3 w-3 rounded bg-emerald-500" /> Free
-        </span>
-        <span className="inline-flex items-center gap-2">
-          <span className="h-3 w-3 rounded bg-primary" /> Occupied
-        </span>
-      </div>
+      <HostelMap blocks={blocks} onBedClick={onBedClick} />
 
-      <div className="grid items-stretch gap-4 lg:grid-cols-2">
-        {blocks.map((block) => {
-          const fullWidth = FULL_WIDTH_CODES.has(block.code);
-          const { total, occupied, free } = blockOccupancy(block);
-
-          return (
-            <Card
-              key={block.id}
-              className={cn(
-                "flex max-h-[min(70vh,560px)] flex-col overflow-hidden",
-                fullWidth && "lg:col-span-2"
-              )}
-            >
-              <CardHeader className="shrink-0 space-y-1 pb-3">
-                <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-lg">
-                  <span className="inline-flex items-center gap-2">
-                    {block.name}
-                    <Badge variant="outline">{block.code}</Badge>
-                  </span>
-                  <span className="text-xs font-normal text-muted-foreground">
-                    {formatKes(block.residenceType.feeKes)} · {occupied}/{total}{" "}
-                    beds
-                    {free > 0 ? ` · ${free} free` : ""}
-                  </span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent
-                className={cn(
-                  "min-h-0 flex-1 overflow-y-auto",
-                  fullWidth
-                    ? "grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8"
-                    : "grid grid-cols-2 gap-2 sm:grid-cols-3"
-                )}
-              >
-                {block.rooms.map((room) => (
-                  <div
-                    key={room.id}
-                    className="rounded-xl border border-border/80 bg-muted/20 p-2"
-                  >
-                    <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                      {room.number}
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {room.beds.map((bed) => {
-                        const occupiedBed = bed.bookings.length > 0;
-                        return (
-                          <button
-                            key={bed.id}
-                            type="button"
-                            onClick={() => onBedClick(bed)}
-                            title={
-                              occupiedBed
-                                ? bed.bookings[0]!.student.name
-                                : "Assign student"
-                            }
-                            className={cn(
-                              "min-w-0 flex-1 rounded-lg border px-2 py-1.5 text-left text-[11px] leading-tight transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold",
-                              occupiedBed
-                                ? "cursor-default border-primary/30 bg-primary text-primary-foreground"
-                                : "border-emerald-200 bg-emerald-50 text-emerald-900 hover:shadow-soft"
-                            )}
-                          >
-                            <div className="font-semibold">
-                              {room.beds.length === 1
-                                ? "Bed"
-                                : `Bed ${bed.label}`}
-                            </div>
-                            <div className="truncate opacity-80">
-                              {occupiedBed
-                                ? bed.bookings[0]!.student.name.split(" ")[0]
-                                : "Free"}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
+      <Dialog
+        open={assignOpen}
+        onOpenChange={(open) => {
+          if (assigning) return;
+          setAssignOpen(open);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Assign bed</DialogTitle>
@@ -253,7 +153,11 @@ function HostelMapInner() {
                   or add students first.
                 </p>
               ) : (
-                <Select value={studentId} onValueChange={setStudentId}>
+                <Select
+                  value={studentId}
+                  onValueChange={setStudentId}
+                  disabled={assigning}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select unassigned student" />
                   </SelectTrigger>
@@ -272,10 +176,13 @@ function HostelMapInner() {
             </div>
             <Button
               className="w-full"
-              onClick={assign}
-              disabled={!studentId || students.length === 0}
+              onClick={() => void assign()}
+              disabled={!studentId || students.length === 0 || assigning}
             >
-              Confirm assignment
+              {assigning ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : null}
+              {assigning ? "Assigning…" : "Confirm assignment"}
             </Button>
           </div>
         </DialogContent>

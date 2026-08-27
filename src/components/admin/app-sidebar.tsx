@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
+  ClipboardList,
   Users,
   Map,
   Wallet,
@@ -21,12 +22,18 @@ import { toast } from "sonner";
 
 const nav = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/admin/intake", label: "Intake", icon: ClipboardList },
   { href: "/admin/students", label: "Students", icon: Users },
   { href: "/admin/hostel", label: "Hostel Map", icon: Map },
   { href: "/admin/payments", label: "Payments", icon: Wallet },
   { href: "/admin/reports", label: "Reports", icon: FileBarChart2 },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
+
+/** Mobile keeps 5 items: drop Reports/Settings so Intake stays in the secretary primary flow. */
+const mobileNav = nav.filter(
+  (item) => item.href !== "/admin/reports" && item.href !== "/admin/settings"
+);
 
 export function AppSidebar({
   collapsed,
@@ -103,7 +110,7 @@ export function AppSidebar({
 
 export function MobileTabBar() {
   const pathname = usePathname();
-  const items = nav.slice(0, 5);
+  const items = mobileNav;
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-card/95 backdrop-blur md:hidden">
       {items.map(({ href, label, icon: Icon }) => {

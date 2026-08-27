@@ -6,6 +6,7 @@ import { Command } from "cmdk";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   LayoutDashboard,
+  ClipboardList,
   Users,
   Map,
   Wallet,
@@ -74,6 +75,7 @@ export function CommandPalette({
             <Command.Group heading="Navigate" className="px-1 py-2 text-xs text-muted-foreground">
               {[
                 { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+                { href: "/admin/intake", label: "Intake", icon: ClipboardList },
                 { href: "/admin/students", label: "Students", icon: Users },
                 { href: "/admin/hostel", label: "Hostel Map", icon: Map },
                 { href: "/admin/payments", label: "Payments", icon: Wallet },

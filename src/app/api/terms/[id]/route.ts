@@ -46,13 +46,19 @@ export async function POST(req: Request, ctx: Ctx) {
     }
 
     const now = new Date();
+    // Clearing the active semester is a full UX reset: hide every uncleared
+    // payment so previous-term history cannot remain on the ledger. Clearing
+    // an inactive term only stamps that term (the current semester stays).
+    const paymentWhere = term.isActive
+      ? { clearedAt: null }
+      : { termId: id, clearedAt: null };
     const [bookings, payments, students] = await prisma.$transaction([
       prisma.booking.updateMany({
         where: { termId: id, status: "ACTIVE" },
         data: { status: "ENDED" },
       }),
       prisma.payment.updateMany({
-        where: { termId: id, clearedAt: null },
+        where: paymentWhere,
         data: { clearedAt: now },
       }),
       // Soft-hide roster from UX; free roomNumber unique for next intake

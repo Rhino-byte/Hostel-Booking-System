@@ -10,11 +10,20 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { MoneyText } from "@/components/money-text";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ResidenceDetailSheet } from "@/components/admin/residence-detail-sheet";
-import { Users, Wallet, AlertCircle, CheckCircle2, ChevronRight } from "lucide-react";
+import {
+  Users,
+  Wallet,
+  AlertCircle,
+  CheckCircle2,
+  ChevronRight,
+  ClipboardList,
+} from "lucide-react";
 
 type Dash = {
   term: { name: string } | null;
@@ -93,6 +102,26 @@ export default function AdminDashboardPage() {
           {data.term ? `Overview for ${data.term.name}` : "No active term configured"}
         </p>
       </div>
+
+      {data.term ? (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
+            <div className="min-w-0">
+              <p className="font-serif text-lg font-semibold text-primary">
+                Start student intake
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Add a student, assign a bed, then record payment — one at a time.
+              </p>
+            </div>
+            <Button asChild>
+              <Link href="/admin/intake">
+                <ClipboardList className="h-4 w-4" /> Start intake
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map(({ label, value, icon: Icon }) => (

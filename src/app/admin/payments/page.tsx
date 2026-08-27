@@ -41,6 +41,7 @@ type Payment = {
   kind: string;
   referenceNo: string | null;
   voidedAt: string | null;
+  clearedAt?: string | null;
   student: {
     id: string;
     name: string;
@@ -193,7 +194,7 @@ function PaymentsInner() {
     const seen = new Set<string>();
     const unique: Payment[] = [];
     for (const p of sorted) {
-      if (p.voidedAt) continue;
+      if (p.voidedAt || p.clearedAt) continue;
       if (seen.has(p.studentId)) continue;
       seen.add(p.studentId);
       unique.push(p);

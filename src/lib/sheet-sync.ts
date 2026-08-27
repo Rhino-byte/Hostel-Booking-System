@@ -282,7 +282,7 @@ async function pullFromSheet(
     if (amount && date) {
       const hash = sheetPaymentHash(admissionNo, date, amount);
       const byHash = await prisma.payment.findFirst({
-        where: { sheetHash: hash, voidedAt: null, clearedAt: null },
+        where: { sheetHash: hash, voidedAt: null },
       });
       if (byHash) continue;
 
@@ -293,7 +293,6 @@ async function pullFromSheet(
           termId: term.id,
           amount,
           voidedAt: null,
-          clearedAt: null,
           date: { gte: start, lte: end },
         },
       });

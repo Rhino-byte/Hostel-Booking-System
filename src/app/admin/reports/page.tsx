@@ -33,7 +33,7 @@ export default function ReportsPage() {
       setTermName(dash.term?.name || "");
       const feeMap = new Map<string, number>();
       for (const p of payments.payments || []) {
-        if (p.voidedAt) continue;
+        if (p.voidedAt || p.clearedAt) continue;
         feeMap.set(p.studentId, (feeMap.get(p.studentId) || 0) + p.amount);
       }
       const built: Row[] = (students.students || []).map(

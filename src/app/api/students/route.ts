@@ -12,7 +12,9 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q")?.trim() || "";
-  const limit = Number(searchParams.get("limit") || 50);
+  const rawLimit = Number(searchParams.get("limit") || 50);
+  const limit =
+    Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50;
   const unbookedOnly =
     searchParams.get("unbooked") === "1" ||
     searchParams.get("unbooked") === "true";
@@ -38,7 +40,7 @@ export async function GET(req: Request) {
       ],
     },
     orderBy: { name: "asc" },
-    take: Math.min(limit, 200),
+    take: Math.min(limit, 500),
     include: {
       bookings: {
         where: { status: "ACTIVE" },

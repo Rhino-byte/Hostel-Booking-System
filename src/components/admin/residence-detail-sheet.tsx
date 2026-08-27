@@ -16,7 +16,10 @@ import {
   SheetTitle,
   SheetDescription,
   SheetBody,
+  SheetFooter,
+  SheetClose,
 } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 import { MoneyText } from "@/components/money-text";
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -352,6 +355,14 @@ export function ResidenceDetailSheet({
             </>
           ) : null}
         </SheetBody>
+
+        <SheetFooter>
+          <SheetClose asChild>
+            <Button type="button" variant="outline" className="w-full">
+              Close
+            </Button>
+          </SheetClose>
+        </SheetFooter>
       </SheetContent>
     </Sheet>
   );

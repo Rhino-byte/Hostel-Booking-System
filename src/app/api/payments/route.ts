@@ -25,13 +25,20 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const studentId = searchParams.get("studentId");
-  const termId = searchParams.get("termId");
+  const termIdParam = searchParams.get("termId");
+  const termId =
+    termIdParam ||
+    (await prisma.term.findFirst({ where: { isActive: true } }))?.id;
+
+  if (!termId) {
+    return NextResponse.json({ payments: [] });
+  }
 
   const payments = await prisma.payment.findMany({
     where: {
       clearedAt: null,
+      termId,
       ...(studentId ? { studentId } : {}),
-      ...(termId ? { termId } : {}),
     },
     include: {
       student: true,

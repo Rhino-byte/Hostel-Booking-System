@@ -27,7 +27,7 @@ export async function PATCH(
   }
 
   const before = await prisma.payment.findUnique({ where: { id } });
-  if (!before || before.voidedAt) {
+  if (!before || before.voidedAt || before.clearedAt) {
     return NextResponse.json({ error: "Payment not found" }, { status: 404 });
   }
 
@@ -74,7 +74,7 @@ export async function DELETE(
     typeof body.reason === "string" ? body.reason : "Voided by staff";
 
   const before = await prisma.payment.findUnique({ where: { id } });
-  if (!before || before.voidedAt) {
+  if (!before || before.voidedAt || before.clearedAt) {
     return NextResponse.json({ error: "Payment not found" }, { status: 404 });
   }
 

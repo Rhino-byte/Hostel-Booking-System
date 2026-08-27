@@ -1,9 +1,11 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Download, Plus, Search, Upload, Users } from "lucide-react";
+import { ClipboardList, Download, Loader2, Plus, Search, Upload, Users } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -87,23 +89,28 @@ function StudentsInner() {
   async function createStudent(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSaving(true);
-    const form = new FormData(e.currentTarget);
-    const res = await fetch("/api/students", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: form.get("name"),
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    setSaving(false);
-    if (!res.ok) {
-      toast.error(data.error || "Could not create student");
-      return;
+    try {
+      const form = new FormData(e.currentTarget);
+      const res = await fetch("/api/students", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.get("name"),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "Could not create student");
+        return;
+      }
+      toast.success("Student added");
+      setOpen(false);
+      load();
+    } catch {
+      toast.error("Could not create student");
+    } finally {
+      setSaving(false);
     }
-    toast.success("Student added");
-    setOpen(false);
-    load();
   }
 
   async function runImport(e: React.FormEvent) {
@@ -116,32 +123,37 @@ function StudentsInner() {
     setImportResult(null);
     const body = new FormData();
     body.append("file", importFile);
-    const res = await fetch("/api/students/import", {
-      method: "POST",
-      body,
-    });
-    const data = await res.json().catch(() => ({}));
-    setImporting(false);
-    if (!res.ok) {
-      toast.error(data.error || "Import failed");
-      return;
-    }
-    setImportResult({
-      created: data.created ?? 0,
-      skipped: data.skipped ?? 0,
-      errors: data.errors ?? [],
-    });
-    toast.success(
-      `Imported ${data.created ?? 0} student${(data.created ?? 0) === 1 ? "" : "s"}`,
-      {
-        description:
-          (data.skipped ?? 0) > 0
-            ? `${data.skipped} row(s) skipped`
-            : undefined,
+    try {
+      const res = await fetch("/api/students/import", {
+        method: "POST",
+        body,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "Import failed");
+        return;
       }
-    );
-    setImportFile(null);
-    load();
+      setImportResult({
+        created: data.created ?? 0,
+        skipped: data.skipped ?? 0,
+        errors: data.errors ?? [],
+      });
+      toast.success(
+        `Imported ${data.created ?? 0} student${(data.created ?? 0) === 1 ? "" : "s"}`,
+        {
+          description:
+            (data.skipped ?? 0) > 0
+              ? `${data.skipped} row(s) skipped`
+              : undefined,
+        }
+      );
+      setImportFile(null);
+      load();
+    } catch {
+      toast.error("Import failed");
+    } finally {
+      setImporting(false);
+    }
   }
 
   return (
@@ -152,7 +164,11 @@ function StudentsInner() {
             Students
           </h1>
           <p className="text-sm text-muted-foreground">
-            Add or import names, then assign rooms on the hostel map.
+            Add or import names, then assign rooms on the hostel map. Or use{" "}
+            <Link href="/admin/intake?mode=bulk" className="text-primary hover:underline">
+              Intake → Batches
+            </Link>{" "}
+            to also assign rooms.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -165,6 +181,11 @@ function StudentsInner() {
             }}
           >
             <Upload className="h-4 w-4" /> Import
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href="/admin/intake">
+              <ClipboardList className="h-4 w-4" /> Guided intake
+            </Link>
           </Button>
           <Button onClick={() => setOpen(true)}>
             <Plus className="h-4 w-4" /> Add student
@@ -208,11 +229,15 @@ function StudentsInner() {
           {filtered.map((s) => {
             const booking = s.bookings[0];
             const room = bookedRoomLabel(s);
+            const focused = params.get("focus") === s.id;
             return (
               <div
                 id={`student-${s.id}`}
                 key={s.id}
-                className="grid gap-2 border-b border-border px-4 py-3 last:border-0 md:grid-cols-12 md:items-center"
+                className={cn(
+                  "grid gap-2 border-b border-border px-4 py-3 last:border-0 md:grid-cols-12 md:items-center",
+                  focused && "bg-gold/15 ring-2 ring-inset ring-gold"
+                )}
               >
                 <div className="col-span-4 font-medium">{s.name}</div>
                 <div className="col-span-3 text-sm tabular-nums text-muted-foreground">
@@ -263,6 +288,7 @@ function StudentsInner() {
               <Input id="name" name="name" required autoFocus minLength={2} />
             </div>
             <Button type="submit" className="w-full" disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {saving ? "Saving…" : "Save student"}
             </Button>
           </form>
@@ -284,7 +310,7 @@ function StudentsInner() {
             <DialogTitle>Import students</DialogTitle>
             <DialogDescription>
               Upload a CSV or Excel file with a <strong>name</strong> column.
-              Rooms are assigned later on the hostel map.
+              Or use Intake → Batches to also assign rooms.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={runImport} className="space-y-4">
@@ -313,6 +339,7 @@ function StudentsInner() {
               className="w-full"
               disabled={importing || !importFile}
             >
+              {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {importing ? "Importing…" : "Import file"}
             </Button>
           </form>
