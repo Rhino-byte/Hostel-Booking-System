@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { newAdmissionNo } from "@/lib/admission";
@@ -22,24 +23,24 @@ export async function GET(req: Request) {
     searchParams.get("unbooked") === "1" ||
     searchParams.get("unbooked") === "true";
 
-  const where = {
-    AND: [
-      { clearedAt: null },
-      q
-        ? {
-            OR: [
-              { name: { contains: q } },
-              { admissionNo: { contains: q } },
-              { roomNumber: { contains: q } },
-              { guardianPhone: { contains: q } },
-            ],
-          }
-        : {},
-      unbookedOnly
-        ? { bookings: { none: { status: "ACTIVE" } } }
-        : {},
-    ],
-  };
+  const and: Prisma.StudentWhereInput[] = [{ clearedAt: null }];
+
+  if (q) {
+    and.push({
+      OR: [
+        { name: { contains: q } },
+        { admissionNo: { contains: q } },
+        { roomNumber: { contains: q } },
+        { guardianPhone: { contains: q } },
+      ],
+    });
+  }
+
+  if (unbookedOnly) {
+    and.push({ bookings: { none: { status: "ACTIVE" } } });
+  }
+
+  const where: Prisma.StudentWhereInput = { AND: and };
 
   const take = Math.min(limit, 500);
 
