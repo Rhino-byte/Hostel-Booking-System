@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { signOutFirebase } from "@/lib/firebase-client";
+import { AdminNavLink } from "@/components/admin/admin-nav-link";
 
 const nav = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
@@ -87,7 +88,7 @@ export function AppSidebar({
         {nav.map(({ href, label, icon: Icon }) => {
           const active = href === "/admin" ? pathname === href : pathname.startsWith(href);
           return (
-            <Link
+            <AdminNavLink
               key={href}
               href={href}
               title={label}
@@ -117,7 +118,7 @@ export function AppSidebar({
               {!collapsed ? (
                 <span className="relative z-10">{label}</span>
               ) : null}
-            </Link>
+            </AdminNavLink>
           );
         })}
       </nav>
@@ -145,7 +146,7 @@ export function MobileTabBar() {
       {items.map(({ href, label, icon: Icon }) => {
         const active = href === "/admin" ? pathname === href : pathname.startsWith(href);
         return (
-          <Link
+          <AdminNavLink
             key={href}
             href={href}
             className={cn(
@@ -170,7 +171,7 @@ export function MobileTabBar() {
             ) : null}
             <Icon className="relative z-10 h-5 w-5" />
             <span className="relative z-10">{label.split(" ")[0]}</span>
-          </Link>
+          </AdminNavLink>
         );
       })}
     </nav>

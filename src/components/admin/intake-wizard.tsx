@@ -86,7 +86,11 @@ function canRecordPayments(role: StaffRole | null) {
   return true;
 }
 
-export function IntakeWizard() {
+export function IntakeWizard({
+  onBootstrapComplete,
+}: {
+  onBootstrapComplete?: () => void;
+}) {
   const router = useRouter();
   const [bootstrapping, setBootstrapping] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -195,6 +199,10 @@ export function IntakeWizard() {
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
+
+  useEffect(() => {
+    if (!bootstrapping) onBootstrapComplete?.();
+  }, [bootstrapping, onBootstrapComplete]);
 
   const filteredUnbooked = useMemo(() => {
     const q = studentQuery.trim().toLowerCase();

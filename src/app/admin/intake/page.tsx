@@ -9,6 +9,7 @@ import {
   SegmentedTabs,
   SegmentedTabPanels,
 } from "@/components/admin/segmented-tabs";
+import { useAdminNavigation } from "@/components/admin/admin-navigation-context";
 
 type IntakeMode = "one" | "bulk";
 
@@ -19,6 +20,7 @@ function isBatchesMode(value: string | null) {
 function IntakeInner() {
   const router = useRouter();
   const params = useSearchParams();
+  const { endSegmentLoad } = useAdminNavigation();
   const mode: IntakeMode = isBatchesMode(params.get("mode")) ? "bulk" : "one";
 
   function setMode(next: IntakeMode) {
@@ -53,9 +55,14 @@ function IntakeInner() {
       </div>
       <SegmentedTabPanels
         activeKey={mode}
+        autoEndLoad={false}
         panels={{
-          one: <IntakeWizard />,
-          bulk: <BulkIntakeWizard />,
+          one: (
+            <IntakeWizard onBootstrapComplete={endSegmentLoad} />
+          ),
+          bulk: (
+            <BulkIntakeWizard onBootstrapComplete={endSegmentLoad} />
+          ),
         }}
       />
     </div>

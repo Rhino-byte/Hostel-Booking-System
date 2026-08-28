@@ -3,6 +3,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { motionTokens } from "@/components/motion/tokens";
 import { cn } from "@/lib/utils";
+import { useAdminNavigation } from "@/components/admin/admin-navigation-context";
 
 export type SegmentedTab<T extends string> = {
   value: T;
@@ -21,6 +22,7 @@ export function SegmentedTabs<T extends string>({
   value,
   onChange,
   layoutId,
+  loadingOverlay = true,
   "aria-label": ariaLabel,
   className,
 }: {
@@ -28,10 +30,18 @@ export function SegmentedTabs<T extends string>({
   value: T;
   onChange: (value: T) => void;
   layoutId: string;
+  loadingOverlay?: boolean;
   "aria-label"?: string;
   className?: string;
 }) {
   const reduce = useReducedMotion();
+  const { startSegmentLoad } = useAdminNavigation();
+
+  function handleChange(next: T) {
+    if (next === value) return;
+    if (loadingOverlay) startSegmentLoad();
+    onChange(next);
+  }
 
   return (
     <div
@@ -55,7 +65,7 @@ export function SegmentedTabs<T extends string>({
                 : "text-muted-foreground hover:text-foreground"
             )}
             aria-pressed={active}
-            onClick={() => onChange(tab.value)}
+            onClick={() => handleChange(tab.value)}
           >
             {active ? (
               reduce ? (
@@ -84,12 +94,15 @@ export function SegmentedTabPanels({
   activeKey,
   panels,
   className,
+  autoEndLoad = true,
 }: {
   activeKey: string;
   panels: Record<string, React.ReactNode>;
   className?: string;
+  autoEndLoad?: boolean;
 }) {
   const reduce = useReducedMotion();
+  const { endSegmentLoad } = useAdminNavigation();
   const content = panels[activeKey];
 
   if (reduce) {
@@ -107,6 +120,9 @@ export function SegmentedTabPanels({
         transition={{
           duration: motionTokens.durationFast,
           ease: motionTokens.easeOutSoft,
+        }}
+        onAnimationComplete={() => {
+          if (autoEndLoad) endSegmentLoad();
         }}
       >
         {content}

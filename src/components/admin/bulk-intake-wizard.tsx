@@ -159,7 +159,11 @@ function mergeStudents(
   return { next, added, skippedDup };
 }
 
-export function BulkIntakeWizard() {
+export function BulkIntakeWizard({
+  onBootstrapComplete,
+}: {
+  onBootstrapComplete?: () => void;
+}) {
   const router = useRouter();
   const [bootstrapping, setBootstrapping] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -275,6 +279,10 @@ export function BulkIntakeWizard() {
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
+
+  useEffect(() => {
+    if (!bootstrapping) onBootstrapComplete?.();
+  }, [bootstrapping, onBootstrapComplete]);
 
   const batchIds = useMemo(
     () =>

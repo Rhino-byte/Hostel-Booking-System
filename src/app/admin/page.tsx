@@ -48,13 +48,16 @@ type Dash = {
 
 export default function AdminDashboardPage() {
   const [data, setData] = useState<Dash | null>(null);
+  const [loading, setLoading] = useState(true);
   const [selectedBlock, setSelectedBlock] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   useEffect(() => {
+    setLoading(true);
     fetch("/api/dashboard")
       .then((r) => r.json())
-      .then(setData);
+      .then(setData)
+      .finally(() => setLoading(false));
   }, []);
 
   function openBlock(code: string) {
@@ -62,12 +65,22 @@ export default function AdminDashboardPage() {
     setSheetOpen(true);
   }
 
-  if (!data) {
+  if (loading || !data) {
     return (
-      <div className="grid gap-4 md:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-28" />
-        ))}
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Skeleton className="h-9 w-48" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-28" />
+          ))}
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Skeleton className="h-72" />
+          <Skeleton className="h-72" />
+        </div>
       </div>
     );
   }

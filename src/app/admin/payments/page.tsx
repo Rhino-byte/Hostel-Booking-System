@@ -393,6 +393,7 @@ function PaymentsInner() {
           aria-label="Fee status filter"
           value={statusFilter}
           onChange={setStatusFilter}
+          loadingOverlay={false}
           tabs={[
             { value: "all", label: "All" },
             { value: "CLEARED", label: "Cleared" },

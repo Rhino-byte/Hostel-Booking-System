@@ -8,6 +8,7 @@ import { MoneyText } from "@/components/money-text";
 import { StatusBadge } from "@/components/status-badge";
 import { Stagger } from "@/components/motion";
 import { paymentStatus } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type Row = {
   studentId: string;
@@ -22,6 +23,7 @@ type Row = {
 export default function ReportsPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [termName, setTermName] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchJson<T>(url: string): Promise<T | null> {
@@ -37,6 +39,8 @@ export default function ReportsPage() {
     }
 
     async function load() {
+      setLoading(true);
+      try {
       const [dash, students, payments, hostel] = await Promise.all([
         fetchJson<{ term?: { name: string } }>("/api/dashboard"),
         fetchJson<{
@@ -92,6 +96,9 @@ export default function ReportsPage() {
       );
       setRows(built);
       void hostel;
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, []);
@@ -155,6 +162,18 @@ export default function ReportsPage() {
         </Button>
       </div>
 
+      {loading ? (
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-40" />
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-16" />
+            ))}
+          </CardContent>
+        </Card>
+      ) : (
       <Card>
         <CardHeader>
           <CardTitle>Balance register</CardTitle>
@@ -192,6 +211,7 @@ export default function ReportsPage() {
           </Stagger>
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }
