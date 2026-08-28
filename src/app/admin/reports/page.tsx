@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MoneyText } from "@/components/money-text";
 import { StatusBadge } from "@/components/status-badge";
+import { Stagger } from "@/components/motion";
 import { paymentStatus } from "@/lib/utils";
 
 type Row = {
@@ -23,20 +24,49 @@ export default function ReportsPage() {
   const [termName, setTermName] = useState("");
 
   useEffect(() => {
+    async function fetchJson<T>(url: string): Promise<T | null> {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        const text = await res.text();
+        if (!text.trim()) return null;
+        return JSON.parse(text) as T;
+      } catch {
+        return null;
+      }
+    }
+
     async function load() {
       const [dash, students, payments, hostel] = await Promise.all([
-        fetch("/api/dashboard").then((r) => r.json()),
-        fetch("/api/students?limit=100").then((r) => r.json()),
-        fetch("/api/payments").then((r) => r.json()),
-        fetch("/api/hostel").then((r) => r.json()),
+        fetchJson<{ term?: { name: string } }>("/api/dashboard"),
+        fetchJson<{
+          students?: {
+            id: string;
+            name: string;
+            admissionNo: string;
+            bookings: {
+              residenceType: { feeKes: number };
+              bed: { room: { block: { code: string } } };
+            }[];
+          }[];
+        }>("/api/students?limit=100"),
+        fetchJson<{
+          payments?: {
+            studentId: string;
+            amount: number;
+            voidedAt: string | null;
+            clearedAt?: string | null;
+          }[];
+        }>("/api/payments"),
+        fetchJson<unknown>("/api/hostel"),
       ]);
-      setTermName(dash.term?.name || "");
+      setTermName(dash?.term?.name || "");
       const feeMap = new Map<string, number>();
-      for (const p of payments.payments || []) {
+      for (const p of payments?.payments || []) {
         if (p.voidedAt || p.clearedAt) continue;
         feeMap.set(p.studentId, (feeMap.get(p.studentId) || 0) + p.amount);
       }
-      const built: Row[] = (students.students || []).map(
+      const built: Row[] = (students?.students || []).map(
         (s: {
           id: string;
           name: string;
@@ -130,34 +160,36 @@ export default function ReportsPage() {
           <CardTitle>Balance register</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {rows.map((r) => (
-            <div
-              key={r.studentId}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border px-4 py-3"
-            >
-              <div>
-                <p className="font-medium">
-                  {r.name}{" "}
-                  <span className="text-sm font-normal text-muted-foreground">
-                    {r.admissionNo} · {r.block}
-                  </span>
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Paid <MoneyText amount={r.feePaid} /> of <MoneyText amount={r.feeDue} />
-                </p>
+          <Stagger immediate>
+            {rows.map((r) => (
+              <div
+                key={r.studentId}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border px-4 py-3"
+              >
+                <div>
+                  <p className="font-medium">
+                    {r.name}{" "}
+                    <span className="text-sm font-normal text-muted-foreground">
+                      {r.admissionNo} · {r.block}
+                    </span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Paid <MoneyText amount={r.feePaid} /> of <MoneyText amount={r.feeDue} />
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <StatusBadge status={r.status} />
+                  <MoneyText
+                    amount={Math.max(0, r.feeDue - r.feePaid)}
+                    className="font-semibold text-primary"
+                  />
+                  <Button size="sm" variant="ghost" onClick={() => printStatement(r)}>
+                    Statement
+                  </Button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <StatusBadge status={r.status} />
-                <MoneyText
-                  amount={Math.max(0, r.feeDue - r.feePaid)}
-                  className="font-semibold text-primary"
-                />
-                <Button size="sm" variant="ghost" onClick={() => printStatement(r)}>
-                  Statement
-                </Button>
-              </div>
-            </div>
-          ))}
+            ))}
+          </Stagger>
         </CardContent>
       </Card>
     </div>

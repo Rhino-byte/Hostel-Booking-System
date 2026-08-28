@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { assertPaymentEditable } from "@/lib/payment-editable";
 import { z } from "zod";
 import { pushStudentSummary } from "@/lib/sheet-sync";
 
@@ -26,10 +27,11 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
-  const before = await prisma.payment.findUnique({ where: { id } });
-  if (!before || before.voidedAt || before.clearedAt) {
-    return NextResponse.json({ error: "Payment not found" }, { status: 404 });
+  const check = await assertPaymentEditable(id);
+  if (!check.ok) {
+    return NextResponse.json({ error: check.error }, { status: check.status });
   }
+  const before = check.payment;
 
   const payment = await prisma.payment.update({
     where: { id },
@@ -73,10 +75,11 @@ export async function DELETE(
   const reason =
     typeof body.reason === "string" ? body.reason : "Voided by staff";
 
-  const before = await prisma.payment.findUnique({ where: { id } });
-  if (!before || before.voidedAt || before.clearedAt) {
-    return NextResponse.json({ error: "Payment not found" }, { status: 404 });
+  const check = await assertPaymentEditable(id);
+  if (!check.ok) {
+    return NextResponse.json({ error: check.error }, { status: check.status });
   }
+  const before = check.payment;
 
   const payment = await prisma.payment.update({
     where: { id },

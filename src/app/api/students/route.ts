@@ -15,46 +15,73 @@ export async function GET(req: Request) {
   const rawLimit = Number(searchParams.get("limit") || 50);
   const limit =
     Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50;
+  const rawOffset = Number(searchParams.get("offset") || 0);
+  const offset =
+    Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
   const unbookedOnly =
     searchParams.get("unbooked") === "1" ||
     searchParams.get("unbooked") === "true";
 
-  const students = await prisma.student.findMany({
-    where: {
-      AND: [
-        { clearedAt: null },
-        q
-          ? {
-              OR: [
-                { name: { contains: q } },
-                { admissionNo: { contains: q } },
-                { roomNumber: { contains: q } },
-                { guardianPhone: { contains: q } },
-              ],
-            }
-          : {},
-        // Exclude students who already have an active room assignment
-        unbookedOnly
-          ? { bookings: { none: { status: "ACTIVE" } } }
-          : {},
-      ],
-    },
-    orderBy: { name: "asc" },
-    take: Math.min(limit, 500),
-    include: {
-      bookings: {
-        where: { status: "ACTIVE" },
-        include: {
-          residenceType: true,
-          bed: { include: { room: { include: { block: true } } } },
-          term: true,
+  const where = {
+    AND: [
+      { clearedAt: null },
+      q
+        ? {
+            OR: [
+              { name: { contains: q } },
+              { admissionNo: { contains: q } },
+              { roomNumber: { contains: q } },
+              { guardianPhone: { contains: q } },
+            ],
+          }
+        : {},
+      unbookedOnly
+        ? { bookings: { none: { status: "ACTIVE" } } }
+        : {},
+    ],
+  };
+
+  const take = Math.min(limit, 500);
+
+  const [total, rows] = await Promise.all([
+    prisma.student.count({ where }),
+    prisma.student.findMany({
+      where,
+      orderBy: { name: "asc" },
+      skip: offset,
+      take,
+      include: {
+        bookings: {
+          where: { status: "ACTIVE" },
+          include: {
+            residenceType: true,
+            bed: { include: { room: { include: { block: true } } } },
+            term: true,
+          },
+          take: 1,
         },
-        take: 1,
+        _count: {
+          select: {
+            payments: {
+              where: { voidedAt: null, clearedAt: null },
+            },
+          },
+        },
       },
-    },
+    }),
+  ]);
+
+  const canDeleteRole = ["ADMIN", "SECRETARY"].includes(session.role);
+  const students = rows.map(({ _count, ...student }) => {
+    const hasLivePayments = _count.payments > 0;
+    return {
+      ...student,
+      hasLivePayments,
+      canDelete: canDeleteRole && !hasLivePayments,
+    };
   });
 
-  return NextResponse.json({ students });
+  return NextResponse.json({ students, total, limit: take, offset });
 }
 
 const createSchema = z.object({

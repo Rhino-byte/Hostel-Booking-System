@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { MoneyText } from "@/components/money-text";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ResidenceDetailSheet } from "@/components/admin/residence-detail-sheet";
+import { Stagger } from "@/components/motion";
 import {
   Users,
   Wallet,
@@ -123,7 +124,7 @@ export default function AdminDashboardPage() {
         </Card>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <Stagger immediate className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map(({ label, value, icon: Icon }) => (
           <Card key={label}>
             <CardContent className="flex items-start justify-between p-5">
@@ -137,7 +138,7 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
         ))}
-      </div>
+      </Stagger>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
@@ -172,39 +173,41 @@ export default function AdminDashboardPage() {
             </p>
           </CardHeader>
           <CardContent className="space-y-3">
-            {data.byBlock.map((b) => (
-              <button
-                key={b.code}
-                type="button"
-                onClick={() => openBlock(b.code)}
-                className="flex w-full items-center justify-between gap-3 rounded-xl border border-border px-4 py-3 text-left transition-colors hover:border-primary/40 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
-              >
-                <div className="min-w-0">
-                  <p className="font-medium">
-                    {b.name}{" "}
-                    <span className="text-muted-foreground">({b.code})</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {b.students}/{b.capacity} beds occupied ·{" "}
-                    {b.capacity > 0
-                      ? Math.round((b.students / b.capacity) * 100)
-                      : 0}
-                    % full
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <div className="text-right text-sm">
-                    <p>
-                      <MoneyText amount={b.collected} className="font-medium text-primary" />
+            <Stagger immediate>
+              {data.byBlock.map((b) => (
+                <button
+                  key={b.code}
+                  type="button"
+                  onClick={() => openBlock(b.code)}
+                  className="flex w-full items-center justify-between gap-3 rounded-xl border border-border px-4 py-3 text-left transition-colors hover:border-primary/40 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium">
+                      {b.name}{" "}
+                      <span className="text-muted-foreground">({b.code})</span>
                     </p>
-                    <p className="text-muted-foreground">
-                      Due <MoneyText amount={b.outstanding} />
+                    <p className="text-xs text-muted-foreground">
+                      {b.students}/{b.capacity} beds occupied ·{" "}
+                      {b.capacity > 0
+                        ? Math.round((b.students / b.capacity) * 100)
+                        : 0}
+                      % full
                     </p>
                   </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                </div>
-              </button>
-            ))}
+                  <div className="flex shrink-0 items-center gap-2">
+                    <div className="text-right text-sm">
+                      <p>
+                        <MoneyText amount={b.collected} className="font-medium text-primary" />
+                      </p>
+                      <p className="text-muted-foreground">
+                        Due <MoneyText amount={b.outstanding} />
+                      </p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                </button>
+              ))}
+            </Stagger>
             <div className="rounded-xl bg-muted px-4 py-3 text-sm">
               Status mix: {data.totals.paid} cleared · {data.totals.partial}{" "}
               partial · {data.totals.unpaid} outstanding

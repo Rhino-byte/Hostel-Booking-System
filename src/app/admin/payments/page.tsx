@@ -30,6 +30,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
 import { StudentFinanceSheet } from "@/components/admin/student-finance-sheet";
+import { SegmentedTabs } from "@/components/admin/segmented-tabs";
+import { Stagger } from "@/components/motion";
 import type { FeeStatus } from "@/lib/utils";
 
 type Payment = {
@@ -53,6 +55,7 @@ type Payment = {
   feeDue: number;
   feePaid: number;
   feeBalance: number;
+  isEditable?: boolean;
 };
 
 type StudentHit = {
@@ -106,15 +109,30 @@ function PaymentsInner() {
 
   const loadLedger = useCallback(async () => {
     setLoading(true);
-    const [pRes, hRes] = await Promise.all([
-      fetch("/api/payments"),
-      fetch("/api/hostel"),
-    ]);
-    const p = await pRes.json();
-    const h = await hRes.json();
-    setPayments(p.payments || []);
-    setTermId(h.term?.id || "");
-    setLoading(false);
+    try {
+      const [pRes, hRes] = await Promise.all([
+        fetch("/api/payments"),
+        fetch("/api/hostel"),
+      ]);
+      if (!pRes.ok) {
+        const p = await pRes.json().catch(() => ({}));
+        toast.error(p.error || "Could not load payments");
+        return;
+      }
+      if (!hRes.ok) {
+        const h = await hRes.json().catch(() => ({}));
+        toast.error(h.error || "Could not load payments");
+        return;
+      }
+      const p = await pRes.json().catch(() => ({}));
+      const h = await hRes.json().catch(() => ({}));
+      setPayments(p.payments || []);
+      setTermId(h.term?.id || "");
+    } catch {
+      toast.error("Could not load payments");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -370,22 +388,18 @@ function PaymentsInner() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Select
-            value={statusFilter}
-            onValueChange={(v) => setStatusFilter(v as StatusFilter)}
-          >
-            <SelectTrigger className="w-full sm:w-48">
-              <SelectValue placeholder="Fee status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="CLEARED">Cleared</SelectItem>
-              <SelectItem value="PARTIAL">Paid partially</SelectItem>
-              <SelectItem value="OVERPAID">Overpaid</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        <SegmentedTabs
+          layoutId="payments-status-tabs"
+          aria-label="Fee status filter"
+          value={statusFilter}
+          onChange={setStatusFilter}
+          tabs={[
+            { value: "all", label: "All" },
+            { value: "CLEARED", label: "Cleared" },
+            { value: "PARTIAL", label: "Partial" },
+            { value: "OVERPAID", label: "Overpaid" },
+          ]}
+        />
 
         {loading ? (
           <div className="space-y-2">
@@ -417,7 +431,8 @@ function PaymentsInner() {
               {statusFilter !== "all" ? ` · ${statusFilter.toLowerCase()}` : ""}
             </p>
             <div className="overflow-hidden rounded-2xl border border-border bg-card">
-              {filteredLedger.map((p) => (
+              <Stagger immediate key={statusFilter}>
+                {filteredLedger.map((p) => (
                   <div
                     key={p.id}
                     role="button"
@@ -476,7 +491,7 @@ function PaymentsInner() {
                             : "text-primary"
                         }`}
                       />
-                      {!p.voidedAt ? (
+                      {!p.voidedAt && p.isEditable ? (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -487,7 +502,8 @@ function PaymentsInner() {
                       ) : null}
                     </div>
                   </div>
-              ))}
+                ))}
+              </Stagger>
             </div>
           </div>
         )}

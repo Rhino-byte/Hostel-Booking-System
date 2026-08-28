@@ -2,9 +2,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { z } from "zod";
-import { getStudentTermBalance } from "@/lib/balances";
+import {
+  getStudentTermBalance,
+  getTermBalanceMaps,
+} from "@/lib/balances";
+import { getLatestEditablePaymentIds } from "@/lib/payment-editable";
 import { pushStudentSummary } from "@/lib/sheet-sync";
-import { paymentStatus, type FeeStatus } from "@/lib/utils";
+import { paymentStatus } from "@/lib/utils";
 
 const paymentSchema = z.object({
   studentId: z.string(),
@@ -18,76 +22,68 @@ const paymentSchema = z.object({
 });
 
 export async function GET(req: Request) {
-  const session = await getSession();
-  if (!session || session.role === "PARENT") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const session = await getSession();
+    if (!session || session.role === "PARENT") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const studentId = searchParams.get("studentId");
+    const termIdParam = searchParams.get("termId");
+    const termId =
+      termIdParam ||
+      (await prisma.term.findFirst({ where: { isActive: true } }))?.id;
+
+    if (!termId) {
+      return NextResponse.json({ payments: [] });
+    }
+
+    const payments = await prisma.payment.findMany({
+      where: {
+        clearedAt: null,
+        termId,
+        ...(studentId ? { studentId } : {}),
+      },
+      include: {
+        student: true,
+        term: true,
+        enteredBy: true,
+      },
+      orderBy: { date: "desc" },
+      take: 200,
+    });
+
+    const studentIds = Array.from(new Set(payments.map((p) => p.studentId)));
+    const [{ statusByStudent, balanceByStudent }, latestEditableByStudent] =
+      await Promise.all([
+        getTermBalanceMaps(termId, studentIds),
+        getLatestEditablePaymentIds(termId, studentIds),
+      ]);
+
+    const enriched = payments.map((p) => {
+      const bal = balanceByStudent.get(p.studentId);
+      const isEditable =
+        !p.voidedAt &&
+        latestEditableByStudent.get(p.studentId) === p.id;
+      return {
+        ...p,
+        isEditable,
+        studentStatus: statusByStudent.get(p.studentId) ?? paymentStatus(0, 0),
+        feeDue: bal?.feeDue ?? 0,
+        feePaid: bal?.feePaid ?? 0,
+        feeBalance: bal?.feeBalance ?? 0,
+      };
+    });
+
+    return NextResponse.json({ payments: enriched });
+  } catch (err) {
+    console.error("GET /api/payments failed:", err);
+    return NextResponse.json(
+      { error: "Failed to load payments" },
+      { status: 500 }
+    );
   }
-
-  const { searchParams } = new URL(req.url);
-  const studentId = searchParams.get("studentId");
-  const termIdParam = searchParams.get("termId");
-  const termId =
-    termIdParam ||
-    (await prisma.term.findFirst({ where: { isActive: true } }))?.id;
-
-  if (!termId) {
-    return NextResponse.json({ payments: [] });
-  }
-
-  const payments = await prisma.payment.findMany({
-    where: {
-      clearedAt: null,
-      termId,
-      ...(studentId ? { studentId } : {}),
-    },
-    include: {
-      student: true,
-      term: true,
-      enteredBy: true,
-    },
-    orderBy: { date: "desc" },
-    take: 200,
-  });
-
-  // Build fee status per student+term from non-voided payments + active booking fee
-  const pairs = Array.from(
-    new Map(
-      payments.map((p) => [`${p.studentId}:${p.termId}`, { studentId: p.studentId, termId: p.termId }])
-    ).values()
-  );
-
-  const statusByPair = new Map<string, FeeStatus>();
-  const balanceByPair = new Map<
-    string,
-    { feeDue: number; feePaid: number; feeBalance: number }
-  >();
-
-  await Promise.all(
-    pairs.map(async ({ studentId: sid, termId: tid }) => {
-      const key = `${sid}:${tid}`;
-      const bal = await getStudentTermBalance(sid, tid);
-      statusByPair.set(key, bal.status);
-      balanceByPair.set(key, {
-        feeDue: bal.feeDue,
-        feePaid: bal.feePaid,
-        feeBalance: bal.feeBalance,
-      });
-    })
-  );
-
-  const enriched = payments.map((p) => {
-    const key = `${p.studentId}:${p.termId}`;
-    const bal = balanceByPair.get(key);
-    return {
-      ...p,
-      studentStatus: statusByPair.get(key) ?? paymentStatus(0, 0),
-      feeDue: bal?.feeDue ?? 0,
-      feePaid: bal?.feePaid ?? 0,
-      feeBalance: bal?.feeBalance ?? 0,
-    };
-  });
-
-  return NextResponse.json({ payments: enriched });
 }
 
 export async function POST(req: Request) {

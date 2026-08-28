@@ -2,10 +2,13 @@
 
 import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { IntakeWizard } from "@/components/admin/intake-wizard";
 import { BulkIntakeWizard } from "@/components/admin/bulk-intake-wizard";
+import {
+  SegmentedTabs,
+  SegmentedTabPanels,
+} from "@/components/admin/segmented-tabs";
 
 type IntakeMode = "one" | "bulk";
 
@@ -37,40 +40,24 @@ function IntakeInner() {
             beds, optional payments — then confirm once.
           </p>
         </div>
-        <div
-          className="inline-flex rounded-xl border border-border bg-card p-1"
-          role="group"
+        <SegmentedTabs
+          layoutId="intake-mode-tabs"
           aria-label="Intake mode"
-        >
-          <button
-            type="button"
-            className={cn(
-              "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
-              mode === "one"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            aria-pressed={mode === "one"}
-            onClick={() => setMode("one")}
-          >
-            One student
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
-              mode === "bulk"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            aria-pressed={mode === "bulk"}
-            onClick={() => setMode("bulk")}
-          >
-            Batches
-          </button>
-        </div>
+          value={mode}
+          onChange={setMode}
+          tabs={[
+            { value: "one", label: "One student" },
+            { value: "bulk", label: "Batches" },
+          ]}
+        />
       </div>
-      {mode === "bulk" ? <BulkIntakeWizard /> : <IntakeWizard />}
+      <SegmentedTabPanels
+        activeKey={mode}
+        panels={{
+          one: <IntakeWizard />,
+          bulk: <BulkIntakeWizard />,
+        }}
+      />
     </div>
   );
 }

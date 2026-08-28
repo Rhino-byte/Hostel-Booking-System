@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   LayoutDashboard,
   ClipboardList,
@@ -36,6 +37,13 @@ const mobileNav = nav.filter(
   (item) => item.href !== "/admin/reports" && item.href !== "/admin/settings"
 );
 
+const navPillSpring = {
+  type: "spring" as const,
+  stiffness: 380,
+  damping: 32,
+  mass: 0.8,
+};
+
 export function AppSidebar({
   collapsed,
   onToggle,
@@ -45,6 +53,7 @@ export function AppSidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const reduceMotion = useReducedMotion();
 
   async function logout() {
     await signOutFirebase();
@@ -83,14 +92,31 @@ export function AppSidebar({
               href={href}
               title={label}
               className={cn(
-                "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+                "relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
                 active
-                  ? "bg-primary text-primary-foreground"
+                  ? "text-primary-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
-              <Icon className="h-4 w-4 shrink-0" />
-              {!collapsed ? <span>{label}</span> : null}
+              {active ? (
+                reduceMotion ? (
+                  <span
+                    className="absolute inset-0 rounded-xl bg-primary"
+                    aria-hidden
+                  />
+                ) : (
+                  <motion.span
+                    layoutId="admin-sidebar-pill"
+                    className="absolute inset-0 rounded-xl bg-primary"
+                    transition={navPillSpring}
+                    aria-hidden
+                  />
+                )
+              ) : null}
+              <Icon className="relative z-10 h-4 w-4 shrink-0" />
+              {!collapsed ? (
+                <span className="relative z-10">{label}</span>
+              ) : null}
             </Link>
           );
         })}
@@ -112,6 +138,7 @@ export function AppSidebar({
 
 export function MobileTabBar() {
   const pathname = usePathname();
+  const reduceMotion = useReducedMotion();
   const items = mobileNav;
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-card/95 backdrop-blur md:hidden">
@@ -122,12 +149,27 @@ export function MobileTabBar() {
             key={href}
             href={href}
             className={cn(
-              "flex flex-1 flex-col items-center gap-1 py-2 text-[10px]",
+              "relative flex flex-1 flex-col items-center gap-1 py-2 text-[10px]",
               active ? "text-primary" : "text-muted-foreground"
             )}
           >
-            <Icon className="h-5 w-5" />
-            {label.split(" ")[0]}
+            {active ? (
+              reduceMotion ? (
+                <span
+                  className="absolute inset-x-2 top-1 bottom-1 rounded-xl bg-primary/10"
+                  aria-hidden
+                />
+              ) : (
+                <motion.span
+                  layoutId="admin-mobile-pill"
+                  className="absolute inset-x-2 top-1 bottom-1 rounded-xl bg-primary/10"
+                  transition={navPillSpring}
+                  aria-hidden
+                />
+              )
+            ) : null}
+            <Icon className="relative z-10 h-5 w-5" />
+            <span className="relative z-10">{label.split(" ")[0]}</span>
           </Link>
         );
       })}

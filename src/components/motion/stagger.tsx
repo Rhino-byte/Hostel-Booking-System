@@ -9,10 +9,13 @@ export function Stagger({
   children,
   className,
   delay = 0,
+  immediate = false,
 }: {
   children: React.ReactNode;
   className?: string;
   delay?: number;
+  /** Animate on mount (admin lists) instead of on scroll into view. */
+  immediate?: boolean;
 }) {
   const reduce = useReducedMotion();
   const items = Children.toArray(children);
@@ -25,8 +28,9 @@ export function Stagger({
     <motion.div
       className={cn(className)}
       initial="hidden"
-      whileInView="show"
-      viewport={{ once: true, amount: 0.2 }}
+      {...(immediate
+        ? { animate: "show" }
+        : { whileInView: "show", viewport: { once: true, amount: 0.2 } })}
       variants={{
         hidden: {},
         show: {

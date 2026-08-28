@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { getStudentTermBalance } from "@/lib/balances";
+import { getLatestEditablePaymentId } from "@/lib/payment-editable";
 
 export async function GET(
   req: Request,
@@ -35,6 +36,8 @@ export async function GET(
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     include: { enteredBy: { select: { name: true } } },
   });
+
+  const latestEditablePaymentId = await getLatestEditablePaymentId(id, term.id);
 
   const booking = bal.booking;
   const roomLabel = booking
@@ -71,6 +74,7 @@ export async function GET(
     feeBalance: bal.feeBalance,
     status: bal.status,
     hasActiveBooking: Boolean(booking),
+    latestEditablePaymentId,
     payments: allPayments.map((p) => ({
       id: p.id,
       amount: p.amount,

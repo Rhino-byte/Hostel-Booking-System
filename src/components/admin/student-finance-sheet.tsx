@@ -6,6 +6,8 @@ import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MoneyText } from "@/components/money-text";
 import { StatusBadge } from "@/components/status-badge";
@@ -18,8 +20,17 @@ import {
   SheetBody,
   SheetFooter,
 } from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { FeeStatus } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+
+const PAYMENT_MODES = ["PAY_BILL", "TILL", "CASH", "BANK", "OTHER"] as const;
 
 export type StudentFinance = {
   student: {
@@ -36,6 +47,7 @@ export type StudentFinance = {
   feeBalance: number;
   status: FeeStatus;
   hasActiveBooking: boolean;
+  latestEditablePaymentId: string | null;
   payments: {
     id: string;
     amount: number;
@@ -65,10 +77,19 @@ export function StudentFinanceSheet({
   const [data, setData] = useState<StudentFinance | null>(null);
   const [loading, setLoading] = useState(false);
   const [voidingId, setVoidingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editDate, setEditDate] = useState("");
+  const [editAmount, setEditAmount] = useState("");
+  const [editMode, setEditMode] = useState<string>("PAY_BILL");
+  const [editRef, setEditRef] = useState("");
+  const [canEditPayments, setCanEditPayments] = useState(false);
 
-  const load = useCallback(async (id: string) => {
-    setLoading(true);
-    setData(null);
+  const load = useCallback(async (id: string, silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setData(null);
+    }
     try {
       const res = await fetch(`/api/students/${id}/finance`);
       const json = await res.json();
@@ -78,7 +99,7 @@ export function StudentFinanceSheet({
       }
       setData(json);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -88,8 +109,70 @@ export function StudentFinanceSheet({
     }
     if (!open) {
       setData(null);
+      setEditingId(null);
     }
   }, [open, studentId, load]);
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    fetch("/api/auth/me")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (!alive) return;
+        const role = json?.user?.role as string | undefined;
+        setCanEditPayments(role === "ADMIN" || role === "SECRETARY");
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [open]);
+
+  function startEdit(p: StudentFinance["payments"][number]) {
+    setEditingId(p.id);
+    setEditDate(format(new Date(p.date), "yyyy-MM-dd"));
+    setEditAmount(String(p.amount));
+    setEditMode(p.mode);
+    setEditRef(p.referenceNo || "");
+  }
+
+  async function saveEdit() {
+    if (!editingId) return;
+    const amount = Number(editAmount);
+    if (!editDate) {
+      toast.error("Date is required");
+      return;
+    }
+    if (!Number.isInteger(amount) || amount <= 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`/api/payments/${editingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount,
+          date: editDate,
+          mode: editMode,
+          referenceNo: editRef.trim() ? editRef.trim() : null,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(json.error || "Could not update payment");
+        return;
+      }
+      toast.success("Payment updated");
+      setEditingId(null);
+      if (studentId) await load(studentId, true);
+      onChanged?.();
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   async function voidPayment(id: string) {
     setVoidingId(id);
@@ -99,12 +182,13 @@ export function StudentFinanceSheet({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason: "Entered in error" }),
       });
+      const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error("Could not void payment");
+        toast.error(json.error || "Could not void payment");
         return;
       }
       toast.message("Payment voided");
-      if (studentId) await load(studentId);
+      if (studentId) await load(studentId, true);
       onChanged?.();
     } finally {
       setVoidingId(null);
@@ -217,52 +301,170 @@ export function StudentFinanceSheet({
                         <div className="space-y-2">
                           {(byDay[day] ?? []).map((p) => {
                             const voided = Boolean(p.voidedAt);
+                            const editing = editingId === p.id;
+                            const isEditable =
+                              canEditPayments &&
+                              !voided &&
+                              data.latestEditablePaymentId === p.id;
                             return (
                               <div
                                 key={p.id}
                                 className={cn(
-                                  "flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-2",
+                                  "rounded-xl border border-border px-3 py-2",
                                   voided && "opacity-60"
                                 )}
                               >
-                                <div className="min-w-0">
-                                  <p className="text-sm">
-                                    {p.mode.replace("_", " ")}
-                                    {p.referenceNo
-                                      ? ` · Ref ${p.referenceNo}`
-                                      : ""}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {p.enteredBy
-                                      ? `by ${p.enteredBy.name}`
-                                      : "System / sheet"}
-                                    {voided ? " · Voided" : ""}
-                                  </p>
-                                </div>
-                                <div className="flex shrink-0 items-center gap-2">
-                                  {voided ? (
-                                    <Badge variant="unpaid">Voided</Badge>
-                                  ) : null}
-                                  <MoneyText
-                                    amount={p.amount}
-                                    className={cn(
-                                      "font-semibold",
-                                      voided
-                                        ? "line-through"
-                                        : "text-primary"
-                                    )}
-                                  />
-                                  {!voided ? (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      disabled={voidingId === p.id}
-                                      onClick={() => void voidPayment(p.id)}
-                                    >
-                                      Void
-                                    </Button>
-                                  ) : null}
-                                </div>
+                                {editing ? (
+                                  <div className="space-y-3">
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <div className="space-y-1">
+                                        <Label htmlFor={`edit-date-${p.id}`}>
+                                          Date
+                                        </Label>
+                                        <Input
+                                          id={`edit-date-${p.id}`}
+                                          type="date"
+                                          value={editDate}
+                                          onChange={(e) =>
+                                            setEditDate(e.target.value)
+                                          }
+                                          required
+                                        />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <Label htmlFor={`edit-amount-${p.id}`}>
+                                          Amount (KES)
+                                        </Label>
+                                        <Input
+                                          id={`edit-amount-${p.id}`}
+                                          inputMode="numeric"
+                                          value={editAmount}
+                                          onChange={(e) =>
+                                            setEditAmount(
+                                              e.target.value.replace(
+                                                /[^\d]/g,
+                                                ""
+                                              )
+                                            )
+                                          }
+                                        />
+                                      </div>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label>Mode</Label>
+                                      <Select
+                                        value={editMode}
+                                        onValueChange={setEditMode}
+                                      >
+                                        <SelectTrigger>
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {PAYMENT_MODES.map((m) => (
+                                            <SelectItem key={m} value={m}>
+                                              {m.replace("_", " ")}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label htmlFor={`edit-ref-${p.id}`}>
+                                        Reference
+                                      </Label>
+                                      <Input
+                                        id={`edit-ref-${p.id}`}
+                                        value={editRef}
+                                        onChange={(e) =>
+                                          setEditRef(e.target.value)
+                                        }
+                                        placeholder="Optional"
+                                      />
+                                    </div>
+                                    <div className="flex justify-end gap-2">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={savingEdit}
+                                        onClick={() => setEditingId(null)}
+                                      >
+                                        Cancel
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        disabled={savingEdit}
+                                        onClick={() => void saveEdit()}
+                                      >
+                                        {savingEdit ? "Saving…" : "Save"}
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <p className="text-sm">
+                                        {p.mode.replace("_", " ")}
+                                        {p.referenceNo
+                                          ? ` · Ref ${p.referenceNo}`
+                                          : ""}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {p.enteredBy
+                                          ? `by ${p.enteredBy.name}`
+                                          : "System / sheet"}
+                                        {voided ? " · Voided" : ""}
+                                      </p>
+                                    </div>
+                                    <div className="flex shrink-0 items-center gap-2">
+                                      {voided ? (
+                                        <Badge variant="unpaid">Voided</Badge>
+                                      ) : null}
+                                      <MoneyText
+                                        amount={p.amount}
+                                        className={cn(
+                                          "font-semibold",
+                                          voided
+                                            ? "line-through"
+                                            : "text-primary"
+                                        )}
+                                      />
+                                      {!voided ? (
+                                        <>
+                                          {isEditable ? (
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              disabled={
+                                                voidingId === p.id ||
+                                                Boolean(editingId)
+                                              }
+                                              onClick={() => startEdit(p)}
+                                            >
+                                              Edit
+                                            </Button>
+                                          ) : null}
+                                          {isEditable ? (
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              disabled={
+                                                voidingId === p.id ||
+                                                Boolean(editingId)
+                                              }
+                                              onClick={() =>
+                                                void voidPayment(p.id)
+                                              }
+                                            >
+                                              Void
+                                            </Button>
+                                          ) : null}
+                                        </>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}

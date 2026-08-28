@@ -1,9 +1,19 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ClipboardList, Download, Loader2, Plus, Search, Upload, Users } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  Download,
+  Loader2,
+  Plus,
+  Search,
+  Upload,
+  Users,
+} from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -19,12 +29,15 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Stagger } from "@/components/motion";
 
 type Student = {
   id: string;
   name: string;
   admissionNo: string;
   roomNumber: string | null;
+  hasLivePayments?: boolean;
+  canDelete?: boolean;
   bookings: {
     residenceType: { label: string; code: string };
     bed: { label: string; room: { number: string; block: { code: string } } };
@@ -45,12 +58,17 @@ function bookedRoomLabel(s: Student): string | null {
   return `${booking.bed.room.block.code}-${booking.bed.room.number}${bed}`;
 }
 
+const PAGE_SIZE = 10;
+
 function StudentsInner() {
   const router = useRouter();
   const params = useSearchParams();
   const [students, setStudents] = useState<Student[]>([]);
   const [q, setQ] = useState("");
+  const [page, setPage] = useState(0);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const searchFirstLoad = useRef(true);
   const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -61,19 +79,44 @@ function StudentsInner() {
     skipped: number;
     errors: ImportError[];
   } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Student | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  async function load(query = q) {
+  const load = useCallback(async (query: string, pageOffset: number) => {
     setLoading(true);
-    const res = await fetch(`/api/students?q=${encodeURIComponent(query)}`);
-    const data = await res.json();
-    setStudents(data.students || []);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    try {
+      const offset = pageOffset * PAGE_SIZE;
+      const res = await fetch(
+        `/api/students?q=${encodeURIComponent(query)}&limit=${PAGE_SIZE}&offset=${offset}`
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "Could not load students");
+        return;
+      }
+      setStudents(data.students || []);
+      setTotal(typeof data.total === "number" ? data.total : 0);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  // Debounced search — resets to first page
+  useEffect(() => {
+    const delay = searchFirstLoad.current ? 0 : 300;
+    searchFirstLoad.current = false;
+    const t = setTimeout(() => {
+      setPage(0);
+      void load(q, 0);
+    }, delay);
+    return () => clearTimeout(t);
+  }, [q, load]);
+
+  // Page navigation (skip page 0 — handled by search effect)
+  useEffect(() => {
+    if (page === 0) return;
+    void load(q, page);
+  }, [page, q, load]);
 
   useEffect(() => {
     const focus = params.get("focus");
@@ -84,7 +127,16 @@ function StudentsInner() {
     }
   }, [params, students]);
 
-  const filtered = useMemo(() => students, [students]);
+  const rangeStart = total === 0 ? 0 : page * PAGE_SIZE + 1;
+  const rangeEnd = Math.min((page + 1) * PAGE_SIZE, total);
+  const hasPagination = total > PAGE_SIZE;
+  const canGoPrev = page > 0;
+  const canGoNext = (page + 1) * PAGE_SIZE < total;
+
+  function reloadFromStart() {
+    setPage(0);
+    void load(q, 0);
+  }
 
   async function createStudent(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -105,7 +157,7 @@ function StudentsInner() {
       }
       toast.success("Student added");
       setOpen(false);
-      load();
+      reloadFromStart();
     } catch {
       toast.error("Could not create student");
     } finally {
@@ -148,11 +200,45 @@ function StudentsInner() {
         }
       );
       setImportFile(null);
-      load();
+      reloadFromStart();
     } catch {
       toast.error("Import failed");
     } finally {
       setImporting(false);
+    }
+  }
+
+  async function deleteStudent() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/students/${deleteTarget.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409) {
+        toast.error(
+          data.error ||
+            "Cannot delete this student because a payment is recorded."
+        );
+        return;
+      }
+      if (!res.ok) {
+        toast.error(data.error || "Could not delete student");
+        return;
+      }
+      toast.success(`${deleteTarget.name} removed from the roster`);
+      setDeleteTarget(null);
+      const remainingOnPage = students.length - 1;
+      if (remainingOnPage === 0 && page > 0) {
+        setPage(page - 1);
+      } else {
+        await load(q, page);
+      }
+    } catch {
+      toast.error("Could not delete student");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -197,12 +283,45 @@ function StudentsInner() {
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           className="pl-9"
-          placeholder="Search by name…"
+          placeholder="Search name, room, admission…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && load(q)}
         />
       </div>
+
+      {!loading && hasPagination ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Showing {rangeStart}–{rangeEnd} of {total}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!canGoPrev}
+              onClick={() => {
+                const nextPage = page - 1;
+                setPage(nextPage);
+                if (nextPage === 0) void load(q, 0);
+              }}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!canGoNext}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {loading ? (
         <div className="space-y-2">
@@ -210,7 +329,7 @@ function StudentsInner() {
             <Skeleton key={i} className="h-16" />
           ))}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : total === 0 && !q.trim() ? (
         <EmptyState
           icon={Users}
           title="No students yet"
@@ -218,7 +337,16 @@ function StudentsInner() {
           actionLabel="Add student"
           onAction={() => setOpen(true)}
         />
+      ) : total === 0 ? (
+        <EmptyState
+          icon={Search}
+          title="No matches"
+          description={`No students match "${q.trim()}". Try a different search.`}
+          actionLabel="Clear search"
+          onAction={() => setQ("")}
+        />
       ) : (
+        <div className="space-y-3">
         <div className="overflow-hidden rounded-2xl border border-border bg-card">
           <div className="hidden grid-cols-12 gap-2 border-b border-border bg-muted/50 px-4 py-2 text-xs font-medium text-muted-foreground md:grid">
             <div className="col-span-4">Full name</div>
@@ -226,50 +354,67 @@ function StudentsInner() {
             <div className="col-span-3">Residence</div>
             <div className="col-span-2" />
           </div>
-          {filtered.map((s) => {
-            const booking = s.bookings[0];
-            const room = bookedRoomLabel(s);
-            const focused = params.get("focus") === s.id;
-            return (
-              <div
-                id={`student-${s.id}`}
-                key={s.id}
-                className={cn(
-                  "grid gap-2 border-b border-border px-4 py-3 last:border-0 md:grid-cols-12 md:items-center",
-                  focused && "bg-gold/15 ring-2 ring-inset ring-gold"
-                )}
-              >
-                <div className="col-span-4 font-medium">{s.name}</div>
-                <div className="col-span-3 text-sm tabular-nums text-muted-foreground">
-                  {room || "—"}
-                </div>
-                <div className="col-span-3 text-sm">
-                  {booking ? (
-                    <Badge variant="outline">
-                      {booking.bed.room.block.code}-{booking.bed.room.number}
-                      {booking.bed.label !== "1" ? booking.bed.label : ""} ·{" "}
-                      {booking.residenceType.code}
-                    </Badge>
-                  ) : (
-                    <span className="text-muted-foreground">Unbooked</span>
+          <Stagger immediate key={`${q}-${page}`}>
+            {students.map((s) => {
+              const booking = s.bookings[0];
+              const room = bookedRoomLabel(s);
+              const focused = params.get("focus") === s.id;
+              return (
+                <div
+                  id={`student-${s.id}`}
+                  key={s.id}
+                  className={cn(
+                    "grid gap-2 border-b border-border px-4 py-3 last:border-0 md:grid-cols-12 md:items-center",
+                    focused && "bg-gold/15 ring-2 ring-inset ring-gold"
                   )}
+                >
+                  <div className="col-span-4 font-medium">{s.name}</div>
+                  <div className="col-span-3 text-sm tabular-nums text-muted-foreground">
+                    {room || "—"}
+                  </div>
+                  <div className="col-span-3 text-sm">
+                    {booking ? (
+                      <Badge variant="outline">
+                        {booking.bed.room.block.code}-{booking.bed.room.number}
+                        {booking.bed.label !== "1" ? booking.bed.label : ""} ·{" "}
+                        {booking.residenceType.code}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground">Unbooked</span>
+                    )}
+                  </div>
+                  <div className="col-span-2 flex flex-wrap items-center gap-1 md:justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        router.push(
+                          `/admin/payments?studentId=${encodeURIComponent(s.id)}`
+                        )
+                      }
+                    >
+                      Payments
+                    </Button>
+                    {s.canDelete ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDeleteTarget(s)}
+                      >
+                        Delete
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="col-span-2 md:text-right">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      router.push(
-                        `/admin/payments?studentId=${encodeURIComponent(s.id)}`
-                      )
-                    }
-                  >
-                    Payments
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </Stagger>
+        </div>
+        {!hasPagination && total > 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Showing {rangeStart}–{rangeEnd} of {total}
+          </p>
+        ) : null}
         </div>
       )}
 
@@ -375,6 +520,47 @@ function StudentsInner() {
               ) : null}
             </div>
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete student</DialogTitle>
+            <DialogDescription>
+              Remove{" "}
+              <strong>{deleteTarget?.name}</strong>
+              {deleteTarget?.admissionNo
+                ? ` (${deleteTarget.admissionNo})`
+                : ""}{" "}
+              from this semester&apos;s roster? Any assigned bed will be freed.
+              This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={deleting}
+              onClick={() => setDeleteTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              disabled={deleting}
+              onClick={() => void deleteStudent()}
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {deleting ? "Deleting…" : "Delete student"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
