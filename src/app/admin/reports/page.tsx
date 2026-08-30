@@ -25,7 +25,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MoneyText } from "@/components/money-text";
-import { StatusBadge } from "@/components/status-badge";
 import { Stagger } from "@/components/motion";
 import { SegmentedTabs } from "@/components/admin/segmented-tabs";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -206,28 +205,6 @@ export default function ReportsPage() {
     URL.revokeObjectURL(url);
   }
 
-  function printStatement(row: ReportRow) {
-    const termName = data?.term?.name || "";
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.write(`
-      <html><head><title>Statement — ${row.name}</title>
-      <style>body{font-family:Georgia,serif;padding:40px;color:#1f2421} h1{color:#14532d}</style>
-      </head><body>
-      <h1>St. Clare's Girls Hostel</h1>
-      <p>Student statement · ${termName}</p>
-      <p><strong>${row.name}</strong> (${row.admissionNo}) · Block ${row.block}</p>
-      <p>Fee due: KES ${row.feeDue.toLocaleString()}<br/>
-      Paid: KES ${row.feePaid.toLocaleString()}<br/>
-      Balance: KES ${Math.max(0, row.feeDue - row.feePaid).toLocaleString()}<br/>
-      Status: ${row.status}</p>
-      <p style="margin-top:40px;font-size:12px;color:#666">Generated ${new Date().toLocaleString()}</p>
-      </body></html>
-    `);
-    w.document.close();
-    w.print();
-  }
-
   const termName = data?.term?.name || "";
   const totals = data?.totals;
   const rows = data?.rows || [];
@@ -271,7 +248,8 @@ export default function ReportsPage() {
           <div>
             <h1 className="font-serif text-3xl font-semibold text-primary">Reports</h1>
             <p className="text-sm text-muted-foreground">
-              Outstanding balances{termName ? ` for ${termName}` : ""}. Export or print statements.
+              Semester collections overview
+              {termName ? ` for ${termName}` : ""}. Export the full balance register as CSV.
             </p>
           </div>
           {terms.length > 0 ? (
@@ -310,16 +288,6 @@ export default function ReportsPage() {
             <Skeleton className="h-72" />
             <Skeleton className="h-72" />
           </div>
-          <Card>
-            <CardHeader>
-              <Skeleton className="h-6 w-40" />
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-16" />
-              ))}
-            </CardContent>
-          </Card>
         </>
       ) : !data?.term ? (
         <Card>
@@ -485,56 +453,6 @@ export default function ReportsPage() {
               </CardContent>
             </Card>
           </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Balance register</CardTitle>
-              <p className="text-sm font-normal text-muted-foreground">
-                {rows.length} student{rows.length === 1 ? "" : "s"} ·{" "}
-                {totals?.paid ?? 0} cleared · {totals?.partial ?? 0} partial ·{" "}
-                {totals?.unpaid ?? 0} outstanding
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {rows.length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">
-                  No booked students for this semester.
-                </p>
-              ) : (
-                <Stagger immediate>
-                  {rows.map((r) => (
-                    <div
-                      key={r.studentId}
-                      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border px-4 py-3"
-                    >
-                      <div>
-                        <p className="font-medium">
-                          {r.name}{" "}
-                          <span className="text-sm font-normal text-muted-foreground">
-                            {r.admissionNo} · {r.block}
-                          </span>
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Paid <MoneyText amount={r.feePaid} /> of{" "}
-                          <MoneyText amount={r.feeDue} />
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <StatusBadge status={r.status} />
-                        <MoneyText
-                          amount={Math.max(0, r.feeDue - r.feePaid)}
-                          className="font-semibold text-primary"
-                        />
-                        <Button size="sm" variant="ghost" onClick={() => printStatement(r)}>
-                          Statement
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </Stagger>
-              )}
-            </CardContent>
-          </Card>
         </>
       )}
     </div>
