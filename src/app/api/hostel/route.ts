@@ -1,7 +1,17 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { pushStudentSummary } from "@/lib/sheet-sync";
 import { z } from "zod";
+
+function bedLabel(
+  blockCode: string,
+  roomNumber: string,
+  bedLabelValue: string
+): string {
+  const extra = bedLabelValue !== "1" ? bedLabelValue : "";
+  return `${blockCode}-${roomNumber}${extra}`;
+}
 
 export async function GET() {
   const session = await getSession();
@@ -52,7 +62,13 @@ export async function POST(req: Request) {
 
   const bed = await prisma.bed.findUnique({
     where: { id: parsed.data.bedId },
-    include: { room: { include: { block: true } } },
+    include: {
+      room: {
+        include: {
+          block: { include: { residenceType: true } },
+        },
+      },
+    },
   });
   if (!bed) {
     return NextResponse.json({ error: "Bed not found" }, { status: 404 });
@@ -78,17 +94,41 @@ export async function POST(req: Request) {
       termId: parsed.data.termId,
       status: "ACTIVE",
     },
+    include: {
+      bed: {
+        include: {
+          room: {
+            include: {
+              block: { include: { residenceType: true } },
+            },
+          },
+        },
+      },
+      residenceType: true,
+    },
   });
 
   if (existing) {
+    const fromBed = existing.bed;
+    const fromBlock = fromBed.room.block;
+    const fromResidence = fromBlock.residenceType;
+    const toBlock = bed.room.block;
+    const toResidence = toBlock.residenceType;
+
     const updated = await prisma.booking.update({
       where: { id: existing.id },
       data: {
         bedId: parsed.data.bedId,
-        residenceTypeId: bed.room.block.residenceTypeId,
+        residenceTypeId: toBlock.residenceTypeId,
         assignedById: session.uid,
       },
     });
+
+    await prisma.student.update({
+      where: { id: parsed.data.studentId },
+      data: { residenceTypeId: toBlock.residenceTypeId },
+    });
+
     await prisma.bookingEvent.create({
       data: {
         bookingId: updated.id,
@@ -108,7 +148,25 @@ export async function POST(req: Request) {
         userId: session.uid,
       },
     });
-    return NextResponse.json({ booking: updated });
+
+    void pushStudentSummary(parsed.data.studentId).catch(() => undefined);
+
+    return NextResponse.json({
+      booking: updated,
+      reassigned: true,
+      from: {
+        bedLabel: bedLabel(fromBlock.code, fromBed.room.number, fromBed.label),
+        blockCode: fromBlock.code,
+        residenceLabel: fromResidence.label,
+        feeKes: fromResidence.feeKes,
+      },
+      to: {
+        bedLabel: bedLabel(toBlock.code, bed.room.number, bed.label),
+        blockCode: toBlock.code,
+        residenceLabel: toResidence.label,
+        feeKes: toResidence.feeKes,
+      },
+    });
   }
 
   const booking = await prisma.booking.create({
@@ -120,6 +178,12 @@ export async function POST(req: Request) {
       assignedById: session.uid,
     },
   });
+
+  await prisma.student.update({
+    where: { id: parsed.data.studentId },
+    data: { residenceTypeId: bed.room.block.residenceTypeId },
+  });
+
   await prisma.bookingEvent.create({
     data: {
       bookingId: booking.id,
@@ -137,6 +201,8 @@ export async function POST(req: Request) {
       userId: session.uid,
     },
   });
+
+  void pushStudentSummary(parsed.data.studentId).catch(() => undefined);
 
   return NextResponse.json({ booking });
 }

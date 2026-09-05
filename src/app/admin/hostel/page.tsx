@@ -23,9 +23,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
   HostelMap,
+  roomBedLabel,
   type BedClickContext,
   type HostelBlock,
 } from "@/components/admin/hostel-map";
+import {
+  ChangeBedDialog,
+  type ChangeBedCurrent,
+  type ChangeBedStudent,
+} from "@/components/admin/change-bed-dialog";
 
 type Student = {
   id: string;
@@ -45,6 +51,10 @@ function HostelMapInner() {
     null
   );
   const [studentId, setStudentId] = useState<string>("");
+
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveStudent, setMoveStudent] = useState<ChangeBedStudent | null>(null);
+  const [moveCurrent, setMoveCurrent] = useState<ChangeBedCurrent | null>(null);
 
   async function load() {
     setLoading(true);
@@ -68,11 +78,22 @@ function HostelMapInner() {
     void load();
   }, []);
 
-  function onBedClick({ bed }: BedClickContext) {
-    if (bed.bookings.length) {
-      toast.message(bed.bookings[0]!.student.name, {
-        description: `${bed.bookings[0]!.student.admissionNo} · occupied`,
+  function onBedClick({ block, room, bed }: BedClickContext) {
+    const booking = bed.bookings[0];
+    if (booking) {
+      setMoveStudent({
+        id: booking.student.id,
+        name: booking.student.name,
+        admissionNo: booking.student.admissionNo,
       });
+      setMoveCurrent({
+        bedId: bed.id,
+        bedLabel: roomBedLabel(block.code, room.number, bed),
+        blockCode: block.code,
+        residenceLabel: block.residenceType.label,
+        feeKes: block.residenceType.feeKes,
+      });
+      setMoveOpen(true);
       return;
     }
     setSelectedBed(bed);
@@ -124,7 +145,8 @@ function HostelMapInner() {
           Hostel map
         </h1>
         <p className="text-sm text-muted-foreground">
-          Click a free bed to assign a student. Occupied beds are locked.
+          Click a free bed to assign a student. Click an occupied bed to move
+          that student to another hostel.
         </p>
       </div>
 
@@ -187,6 +209,16 @@ function HostelMapInner() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ChangeBedDialog
+        open={moveOpen}
+        onOpenChange={setMoveOpen}
+        student={moveStudent}
+        termId={termId}
+        current={moveCurrent}
+        blocks={blocks}
+        onDone={load}
+      />
     </div>
   );
 }

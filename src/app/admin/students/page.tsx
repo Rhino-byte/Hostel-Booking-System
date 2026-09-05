@@ -30,6 +30,15 @@ import { EmptyState } from "@/components/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Stagger } from "@/components/motion";
+import {
+  ChangeBedDialog,
+  type ChangeBedCurrent,
+  type ChangeBedStudent,
+} from "@/components/admin/change-bed-dialog";
+import {
+  roomBedLabel,
+  type HostelBlock,
+} from "@/components/admin/hostel-map";
 
 type Student = {
   id: string;
@@ -39,8 +48,12 @@ type Student = {
   hasLivePayments?: boolean;
   canDelete?: boolean;
   bookings: {
-    residenceType: { label: string; code: string };
-    bed: { label: string; room: { number: string; block: { code: string } } };
+    residenceType: { label: string; code: string; feeKes: number };
+    bed: {
+      id: string;
+      label: string;
+      room: { number: string; block: { code: string } };
+    };
   }[];
 };
 
@@ -81,6 +94,12 @@ function StudentsInner() {
   } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Student | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveStudent, setMoveStudent] = useState<ChangeBedStudent | null>(null);
+  const [moveCurrent, setMoveCurrent] = useState<ChangeBedCurrent | null>(null);
+  const [hostelBlocks, setHostelBlocks] = useState<HostelBlock[]>([]);
+  const [termId, setTermId] = useState("");
+  const [moveLoading, setMoveLoading] = useState(false);
 
   const load = useCallback(async (query: string, pageOffset: number) => {
     setLoading(true);
@@ -205,6 +224,53 @@ function StudentsInner() {
       toast.error("Import failed");
     } finally {
       setImporting(false);
+    }
+  }
+
+  async function openChangeBed(s: Student) {
+    const booking = s.bookings[0];
+    if (!booking) return;
+    setMoveLoading(true);
+    try {
+      let blocks = hostelBlocks;
+      let activeTermId = termId;
+      if (!blocks.length || !activeTermId) {
+        const res = await fetch("/api/hostel");
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast.error(data.error || "Could not load hostel beds");
+          return;
+        }
+        blocks = data.blocks || [];
+        activeTermId = data.term?.id || "";
+        setHostelBlocks(blocks);
+        setTermId(activeTermId);
+      }
+      if (!activeTermId) {
+        toast.error("No active term configured");
+        return;
+      }
+      setMoveStudent({
+        id: s.id,
+        name: s.name,
+        admissionNo: s.admissionNo,
+      });
+      setMoveCurrent({
+        bedId: booking.bed.id,
+        bedLabel: roomBedLabel(
+          booking.bed.room.block.code,
+          booking.bed.room.number,
+          booking.bed
+        ),
+        blockCode: booking.bed.room.block.code,
+        residenceLabel: booking.residenceType.label,
+        feeKes: booking.residenceType.feeKes,
+      });
+      setMoveOpen(true);
+    } catch {
+      toast.error("Could not open change bed");
+    } finally {
+      setMoveLoading(false);
     }
   }
 
@@ -384,6 +450,16 @@ function StudentsInner() {
                     )}
                   </div>
                   <div className="col-span-2 flex flex-wrap items-center gap-1 md:justify-end">
+                    {booking ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={moveLoading}
+                        onClick={() => void openChangeBed(s)}
+                      >
+                        Change bed
+                      </Button>
+                    ) : null}
                     <Button
                       variant="outline"
                       size="sm"
@@ -563,6 +639,19 @@ function StudentsInner() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ChangeBedDialog
+        open={moveOpen}
+        onOpenChange={setMoveOpen}
+        student={moveStudent}
+        termId={termId}
+        current={moveCurrent}
+        blocks={hostelBlocks}
+        onDone={async () => {
+          setHostelBlocks([]);
+          await load(q, page);
+        }}
+      />
     </div>
   );
 }

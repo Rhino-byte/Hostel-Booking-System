@@ -47,7 +47,7 @@ const FULL_WIDTH_CODES = new Set(["A", "B", "C"]);
 const TONE_CLASS: Record<BedTone, string> = {
   free: "border-emerald-200 bg-emerald-50 text-emerald-900 hover:shadow-soft",
   occupied:
-    "cursor-default border-primary/30 bg-primary text-primary-foreground",
+    "border-primary/30 bg-primary text-primary-foreground hover:shadow-soft",
   pending: "border-gold bg-gold/20 text-foreground ring-2 ring-gold",
   selected: "border-gold bg-gold/20 text-foreground ring-2 ring-gold",
 };
@@ -109,7 +109,7 @@ function defaultAppearance(bed: HostelBed): BedAppearance {
     return {
       tone: "occupied",
       caption: occupant.name.split(" ")[0] || occupant.name,
-      title: `${occupant.name} · occupied`,
+      title: `${occupant.name} · change bed`,
     };
   }
   return { tone: "free", caption: "Free", title: "Assign student" };
