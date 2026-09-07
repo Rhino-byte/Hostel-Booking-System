@@ -47,6 +47,14 @@ export function UsersManagementCard({
   const [role, setRole] = useState<(typeof ROLES)[number]>("PARENT");
   const [password, setPassword] = useState("");
 
+  const [passwordTarget, setPasswordTarget] = useState<ListedUser | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [settingPassword, setSettingPassword] = useState(false);
+
+  const [deleteTarget, setDeleteTarget] = useState<ListedUser | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -86,6 +94,83 @@ export function UsersManagementCard({
     }
   }
 
+  function openSetPassword(u: ListedUser) {
+    setPasswordTarget(u);
+    setNewPassword("");
+    setConfirmPassword("");
+  }
+
+  async function onSetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (!passwordTarget) return;
+    if (newPassword.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+    setSettingPassword(true);
+    try {
+      const res = await fetch(`/api/users/${passwordTarget.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not set password");
+      toast.success(
+        `Email/password sign-in enabled for ${passwordTarget.name}`
+      );
+      if (data.user) {
+        setUsers((prev) =>
+          prev.map((u) =>
+            u.id === passwordTarget.id
+              ? {
+                  ...u,
+                  firebaseUid: data.user.firebaseUid,
+                  email: data.user.email,
+                }
+              : u
+          )
+        );
+      }
+      setPasswordTarget(null);
+      setNewPassword("");
+      setConfirmPassword("");
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Set password failed");
+    } finally {
+      setSettingPassword(false);
+    }
+  }
+
+  async function onDeleteUser() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/users/${deleteTarget.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not delete user");
+      toast.success(
+        data.firebaseDeleted
+          ? `${deleteTarget.name} removed from the app and Firebase Auth`
+          : `${deleteTarget.name} removed from the app`
+      );
+      setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id));
+      setDeleteTarget(null);
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <>
       <Card>
@@ -94,7 +179,8 @@ export function UsersManagementCard({
             <CardTitle>Users</CardTitle>
             <CardDescription>
               No public sign-up. Add staff and parents here; they sign in with
-              email/password or Google.
+              email/password or Google. Use Set password for Google-only
+              accounts.
             </CardDescription>
           </div>
           <Button size="sm" onClick={() => setOpen(true)}>
@@ -110,16 +196,36 @@ export function UsersManagementCard({
             users.map((u) => (
               <div
                 key={u.id}
-                className="flex items-center justify-between rounded-xl border border-border px-3 py-2 text-sm"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border px-3 py-2 text-sm"
               >
-                <div>
+                <div className="min-w-0">
                   <p className="font-medium">{u.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {u.email || u.phone || "No email"}
                     {!u.firebaseUid ? " · pending first sign-in" : ""}
                   </p>
                 </div>
-                <Badge variant="outline">{u.role}</Badge>
+                <div className="flex shrink-0 items-center gap-2">
+                  {u.email ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openSetPassword(u)}
+                    >
+                      Set password
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setDeleteTarget(u)}
+                  >
+                    Delete
+                  </Button>
+                  <Badge variant="outline">{u.role}</Badge>
+                </div>
               </div>
             ))
           )}
@@ -190,6 +296,101 @@ export function UsersManagementCard({
               {loading ? "Creating…" : "Create user"}
             </Button>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(passwordTarget)}
+        onOpenChange={(next) => {
+          if (!next && !settingPassword) {
+            setPasswordTarget(null);
+            setNewPassword("");
+            setConfirmPassword("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set password</DialogTitle>
+            <DialogDescription>
+              {passwordTarget
+                ? `Enable email/password sign-in for ${passwordTarget.name} (${passwordTarget.email}). Google sign-in will keep working.`
+                : "Enable email/password sign-in."}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={onSetPassword} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="set-password">New password</Label>
+              <Input
+                id="set-password"
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+                disabled={settingPassword}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm-password">Confirm password</Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                disabled={settingPassword}
+              />
+            </div>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={settingPassword}
+            >
+              {settingPassword ? "Saving…" : "Save password"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(next) => {
+          if (!next && !deleting) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete user</DialogTitle>
+            <DialogDescription>
+              {deleteTarget
+                ? `Remove ${deleteTarget.name}${
+                    deleteTarget.email ? ` (${deleteTarget.email})` : ""
+                  } from the app and Firebase Auth. You can add them again later so they can sign in fresh.`
+                : "Remove this user from the app and Firebase Auth."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={deleting}
+              onClick={() => setDeleteTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              disabled={deleting}
+              onClick={() => void onDeleteUser()}
+            >
+              {deleting ? "Deleting…" : "Delete user"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </>
